@@ -6,30 +6,28 @@ from .models import AuditLog
 class AuditLogAdmin(admin.ModelAdmin):
     list_display = (
         'id',
-        'user_display',
-        'action_type_display',
+        'profile_display',
         'action',
         'description_short',
         'created_at',
     )
 
     search_fields = (
-        'user__username',
-        'user__email',
+        'profile__first_name',
+        'profile__last_name',
+        'profile__dni',
         'action',
         'description',
     )
 
     list_filter = (
-        'action_type',
         'created_at',
     )
 
     ordering = ('-created_at',)
 
     readonly_fields = (
-        'user',
-        'action_type',
+        'profile',
         'action',
         'description',
         'created_at',
@@ -37,21 +35,11 @@ class AuditLogAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         qs = super().get_queryset(request)
-        return qs.select_related('user')
+        return qs.select_related('profile')
 
-    def action_type_display(self, obj):
-        color_map = {
-            'info': 'color: #007bff;',
-            'warning': 'color: #ffc107;',
-            'error': 'color: #dc3545;',
-        }
-        color = color_map.get(obj.action_type, 'color: #6c757d;') 
-        return format_html(f'<strong style="{color}">● {obj.action_type.upper()}</strong>')
-    action_type_display.short_description = "Type"
-
-    def user_display(self, obj):
-        return obj.user.username if obj.user else "System"
-    user_display.short_description = "User"
+    def profile_display(self, obj):
+        return f"{obj.profile.first_name} {obj.profile.last_name}" if obj.profile else "System"
+    profile_display.short_description = "Profile"
 
     def description_short(self, obj):
         return (obj.description[:75] + '...') if len(obj.description) > 75 else obj.description

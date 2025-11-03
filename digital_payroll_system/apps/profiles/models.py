@@ -16,11 +16,11 @@ class Profile(BaseModel):
         ('admin', 'Admin'),
     )
 
-    dni = models.CharField(max_length=15, unique=True)
+    dni = models.CharField(max_length=15, unique=True, null=True, blank=True)
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')
 
-    position = models.CharField(max_length=100)
-    description = models.TextField()
+    position = models.CharField(max_length=100, null=True, blank=True)
+    description = models.TextField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
     payment_date = models.DateField(null=True, blank=True)
     resigned = models.BooleanField(default=False)
