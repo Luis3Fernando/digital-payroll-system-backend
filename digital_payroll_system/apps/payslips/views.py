@@ -1,6 +1,8 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
+from django.core.exceptions import ValidationError
+from uuid import UUID
 from openpyxl import load_workbook
 from apps.profiles.models import Profile
 from .models import Payslip
@@ -175,6 +177,232 @@ class PayslipUploadViewSet(viewsets.ViewSet):
             APIResponse.success(
                 message="Procesamiento finalizado.",
                 data={'messages': messages}
+            ),
+            status=status.HTTP_200_OK
+        )
+    
+    @action(detail=False, methods=['delete'], url_path='clear-payslips')
+    def clear_payslips(self, request):
+        if not request.user.profile.role == 'admin':
+            return Response(
+                APIResponse.error(
+                    message="No tiene permisos para realizar esta acción.",
+                    code=status.HTTP_403_FORBIDDEN
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        total_deleted = Payslip.objects.count() 
+        Payslip.objects.all().delete() 
+
+        AuditLog.objects.create(
+            profile=request.user.profile,
+            action="ELIMINAR BOLETAS",
+            description=f"Se eliminaron {total_deleted} boletas de todos los usuarios."
+        )
+
+        return Response(
+            APIResponse.success(
+                message=f"Se eliminaron {total_deleted} boletas correctamente."
+            ),
+            status=status.HTTP_200_OK
+        )
+    
+    @action(detail=False, methods=['delete'], url_path='delete-payslip')
+    def delete_payslip(self, request):
+        payslip_id = request.data.get('id')
+
+        if not payslip_id:
+            return Response(
+                APIResponse.error(
+                    message="Se requiere el ID de la boleta para eliminar.",
+                    code=status.HTTP_400_BAD_REQUEST
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not request.user.profile.role == 'admin':
+            return Response(
+                APIResponse.error(
+                    message="No tiene permisos para realizar esta acción.",
+                    code=status.HTTP_403_FORBIDDEN
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        try:
+            uuid_obj = UUID(payslip_id, version=4)
+        except (ValueError, TypeError):
+            return Response(
+                APIResponse.error(
+                    message=f"El ID '{payslip_id}' no es un UUID válido.",
+                    code=status.HTTP_400_BAD_REQUEST
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            payslip = Payslip.objects.get(id=payslip_id)
+        except Payslip.DoesNotExist:
+            return Response(
+                APIResponse.error(
+                    message=f"No se encontró ninguna boleta con ID {payslip_id}.",
+                    code=status.HTTP_404_NOT_FOUND
+                ),
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        payslip.delete()
+
+        AuditLog.objects.create(
+            profile=request.user.profile,
+            action="ELIMINAR BOLETA",
+            description=f"Se eliminó la boleta con ID {payslip_id} del usuario {payslip.profile.dni}."
+        )
+
+        return Response(
+            APIResponse.success(
+                message=f"Boleta con ID {payslip_id} eliminada correctamente."
+            ),
+            status=status.HTTP_200_OK
+        )
+    
+    @action(detail=False, methods=['get'], url_path='list-payslips')
+    def list_payslips(self, request):
+        if not request.user.profile.role == 'admin':
+            return Response(
+                APIResponse.error(
+                    message="No tiene permisos para realizar esta acción.",
+                    code=status.HTTP_403_FORBIDDEN
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        page = int(request.query_params.get('page', 1))
+        page_size = 20
+        offset = (page - 1) * page_size
+        limit = offset + page_size
+
+        queryset = Payslip.objects.select_related('profile').order_by('-issue_date')
+        total = queryset.count()
+        payslips = queryset[offset:limit]
+
+        results = []
+        for p in payslips:
+            results.append({
+                "id": str(p.id),
+                "profile_id": str(p.profile.id),
+                "profile_dni": p.profile.dni,
+                "issue_date": p.issue_date.isoformat(),
+                "pdf_file": p.pdf_file,
+                "view_status": p.view_status,
+                "concept": p.concept,
+                "amount": float(p.amount),
+                "data_source": p.data_source,
+                "payroll_type": p.payroll_type,
+                "data_type": p.data_type,
+                "position_order": p.position_order
+            })
+
+        pagination = {
+            "current_page": page,
+            "page_size": page_size,
+            "total_items": total,
+            "total_pages": (total + page_size - 1) // page_size,
+            "has_next": limit < total,
+            "has_previous": page > 1
+        }
+
+        return Response(
+            APIResponse.success(
+                data=results,
+                message=f"{len(results)} boletas obtenidas.",
+                meta={"pagination": pagination}
+            ),
+            status=status.HTTP_200_OK
+        )
+    
+    @action(detail=False, methods=['get'], url_path='my-payslips')
+    def my_payslips(self, request):
+        user = request.user
+
+        if user.profile.role != 'user':
+            return Response(
+                APIResponse.error(
+                    message="No tiene permisos para acceder a sus boletas.",
+                    code=status.HTTP_403_FORBIDDEN
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        profile = user.profile
+
+        month = request.query_params.get('month') 
+        year = request.query_params.get('year') 
+
+        payslips_qs = Payslip.objects.filter(profile=profile).order_by('-issue_date')
+
+        if year:
+            try:
+                year = int(year)
+                payslips_qs = payslips_qs.filter(issue_date__year=year)
+            except ValueError:
+                return Response(
+                    APIResponse.error(message="Año inválido"),
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        if month:
+            try:
+                month = int(month)
+                if not 1 <= month <= 12:
+                    raise ValueError
+                payslips_qs = payslips_qs.filter(issue_date__month=month)
+            except ValueError:
+                return Response(
+                    APIResponse.error(message="Mes inválido"),
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+        page = int(request.query_params.get('page', 1))
+        page_size = 20
+        offset = (page - 1) * page_size
+        limit = offset + page_size
+
+        total = payslips_qs.count()
+        payslips = payslips_qs[offset:limit]
+
+        results = []
+        for p in payslips:
+            results.append({
+                "id": str(p.id),
+                "profile_id": str(p.profile.id),
+                "profile_dni": p.profile.dni,
+                "issue_date": p.issue_date.isoformat(),
+                "pdf_file": p.pdf_file,
+                "view_status": p.view_status,
+                "concept": p.concept,
+                "amount": float(p.amount),
+                "data_source": p.data_source,
+                "payroll_type": p.payroll_type,
+                "data_type": p.data_type,
+                "position_order": p.position_order
+            })
+
+        pagination = {
+            "current_page": page,
+            "page_size": page_size,
+            "total_items": total,
+            "total_pages": (total + page_size - 1) // page_size,
+            "has_next": limit < total,
+            "has_previous": page > 1
+        }
+
+        return Response(
+            APIResponse.success(
+                data=results,
+                message=f"{len(results)} boletas obtenidas.",
+                meta={"pagination": pagination}
             ),
             status=status.HTTP_200_OK
         )
