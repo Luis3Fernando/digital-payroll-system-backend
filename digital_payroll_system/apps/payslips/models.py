@@ -4,14 +4,14 @@ from apps.profiles.models import Profile
 
 class Payslip(BaseModel):
     VIEW_STATUS_CHOICES = (
-        ('unseen', 'Unseen'),
-        ('seen', 'Seen'),
-        ('downloaded', 'Downloaded'),
+        ('unseen', 'No visto'),
+        ('seen', 'Visto'),
+        ('generated', 'Generado'),
     )
 
     profile = models.ForeignKey(Profile, on_delete=models.CASCADE, related_name='payslips')
     issue_date = models.DateField()
-    pdf_file = models.CharField(max_length=255)
+    pdf_file = models.FileField(upload_to='payslips/', null=True, blank=True)
     view_status = models.CharField(max_length=20, choices=VIEW_STATUS_CHOICES, default='unseen')
 
     concept = models.CharField(max_length=150)

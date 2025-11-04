@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Boleta de Pagos de Remuneraciones</title>
+    <style>
+      @page {
+        size: A4 landscape;
+        margin: 0.5cm;
+      }
+
+      body {
+        font-family: Arial, sans-serif;
+        font-size: 9pt;
+      }
+
+      .payslip-table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      .payslip-table td {
+        padding: 2px 2px;
+        vertical-align: top;
+      }
+      .data-label {
+        font-weight: bold;
+        color: #444;
+      }
+      .data-value {
+        font-weight: bold;
+        color: #000;
+      }
+      .center {
+        text-align: center;
+      }
+      .right {
+        text-align: right;
+      }
+    </style>
+  </head>
+  <body>
+    <div>
+      <table
+        style="
+          width: 100%;
+          border-bottom: 1px solid #000;
+          margin-bottom: 5px;
+          border-collapse: collapse;
+        "
+      >
+        <tr>
+          <td
+            style="width: 30%; font-size: 8.5pt; text-align: left; padding: 0"
+          >
+            UNIVERSIDAD TECNOLOGICA DE LOS ANDES
+          </td>
+          <td
+            style="width: 25%; font-size: 8.5pt; text-align: center; padding: 0"
+          >
+            RUC: 20104988204
+          </td>
+          <td
+            style="width: 35%; font-size: 8.5pt; text-align: center; padding: 0"
+          >
+            SUB DIRECCION DE RECURSOS HUMANOS
+          </td>
+          <td
+            style="
+              width: 10%;
+              font-size: 8.5pt;
+              font-weight: bold;
+              text-align: right;
+              padding: 0;
+            "
+          >
+            Nro. 18
+          </td>
+        </tr>
+        <tr>
+          <td
+            colspan="4"
+            style="
+              font-weight: bold;
+              font-size: 10pt;
+              text-align: center;
+              padding: 2px 0;
+            "
+          >
+            PLANILLA PERSONAL DOCENTE CONTRATADO TIEMPO PARCIAL SEDE CENTRAL
+          </td>
+        </tr>
+        <tr>
+          <td
+            colspan="4"
+            style="
+              font-weight: bold;
+              font-size: 11pt;
+              text-align: center;
+              padding: 2px 0;
+            "
+          >
+            BOLETA DE PAGOS DE REMUNERACIONES
+          </td>
+        </tr>
+      </table>
+      <table style="width: 100%; border-collapse: collapse; margin-bottom: 5px">
+        <tr>
+          <td style="width: 50%; text-align: left; font-size: 9pt">
+            <span class="data-label">Fecha Impr.:</span>
+            <span class="data-value">{{ print_date }}</span>
+          </td>
+          <td
+            style="
+              width: 50%;
+              text-align: right;
+              font-weight: bold;
+              font-size: 10pt;
+            "
+          >
+            {{ issue_date_es }}
+          </td>
+        </tr>
+      </table>
+      <table class="data-table" style="width: 100%; border-collapse: collapse">
+        <tr style="border-top: 1px solid #000">
+          <td style="width: 60%; border-right: 1px solid #ccc; padding: 5px">
+            <span class="data-label">DNI:</span>
+            <span class="data-value">{{dni}}</span> &nbsp;&nbsp;&nbsp;
+            <span class="data-value">{{last_name}}, {{first_name}}</span>
+          </td>
+          <td style="width: 40%; padding: 5px">
+            <span style="font-size: 8.5pt; text-align: right; display: block"
+              >{{position}} {{description}}</span
+            >
+            <div style="font-size: 9pt; text-align: right; margin-top: 5px">
+              <span class="data-label">FechaIngreso:</span> {{start_date}}
+            </div>
+          </td>
+        </tr>
+        <tr style="border-bottom: 1px solid #000">
+          <td style="width: 60%">
+            <table style="width: 100%; border-collapse: collapse">
+              <tr>
+                <td style="width: 16.66%; text-align: center">
+                  <span class="data-label">Condición:</span>
+                  <span
+                    class="data-value"
+                    style="border: 1px solid #000; padding: 3px"
+                    >{{condition}}</span
+                  >
+                </td>
+                <td style="width: 16.66%; text-align: center">
+                  <span class="data-label">Régimen:</span>
+                  <span
+                    class="data-value"
+                    style="border: 1px solid #000; padding: 0 4px"
+                    >{{regimen}}</span
+                  >
+                </td>
+                <td style="width: 16.66%; text-align: center">
+                  <span class="data-label">Categoría:</span>
+                  <span
+                    class="data-value"
+                    style="border: 1px solid #000; padding: 0 4px"
+                    >{{category}}</span
+                  >
+                </td>
+                <td style="width: 16.66%; text-align: center">
+                  <span class="data-label">DíasPagar:</span>
+                  <span
+                    class="data-value"
+                    style="border: 1px solid #000; padding: 0 4px"
+                    >{{worked_days}}</span
+                  >
+                </td>
+                <td style="width: 16.66%; text-align: center">
+                  <span class="data-label">Hrs.Pagar:</span>
+                  <span
+                    class="data-value"
+                    style="border: 1px solid #000; padding: 0 4px"
+                    >{{worked_hours}}</span
+                  >
+                </td>
+                <td style="width: 16.66%; text-align: center">
+                  <span class="data-label">Tard. y PP:</span>
+                  <span
+                    class="data-value"
+                    style="border: 1px solid #000; padding: 0 4px"
+                    >{{discount_lateness}}</span
+                  >
+                </td>
+              </tr>
+            </table>
+          </td>
+          <td style="width: 40%; text-align: right; padding: 2px 5px">
+            <span class="data-label">FechaCese:</span> {{end_date}}
+          </td>
+        </tr>
+      </table>
+      <table
+        class="payslip-table"
+        style="border-top: 1px solid #000; width: 100%"
+      >
+        <tr>
+          <td style="width: 25%; border: 1px solid #000; padding: 0">
+            <table class="payslip-table" style="width: 100%">
+              <tr>
+                <td
+                  colspan="2"
+                  style="font-weight: bold; border-bottom: 1px solid #000"
+                >
+                  Remuneraciones Ingresos
+                </td>
+              </tr>
+              <tr>
+                <td style="width: 70%">Remun. Total</td>
+                <td class="right" style="width: 30%">
+                  {{ remuneracion_total }}
+                </td>
+              </tr>
+              <tr>
+                <td>Asignacion. Fam.</td>
+                <td class="right">{{ asignacion_familiar }}</td>
+              </tr>
+              <tr style="border-bottom: 1px solid #000">
+                <td>Reintegros</td>
+                <td class="right">{{ reintegros }}</td>
+              </tr>
+              <tr>
+                <td colspan="2" style="padding-top: 50px">&nbsp;</td>
+              </tr>
+            </table>
+          </td>
+          <td style="width: 25%; border: 1px solid #000; padding: 0">
+            <table class="payslip-table" style="width: 100%">
+              <tr>
+                <td
+                  colspan="2"
+                  style="
+                    font-weight: bold;
+                    text-align: center;
+                    border-bottom: 1px solid #000;
+                  "
+                >
+                  Descuentos de Ley
+                </td>
+              </tr>
+              <tr>
+                <td colspan="2" style="padding-top: 5px">
+                  Nombre del Sist. de Pensión:
+                  <span style="font-weight: bold">{{sistema_pension}}</span>
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid #ccc">
+                <td colspan="2" style="padding-bottom: 5px">
+                  Cód.Afil.Prof. {{codigo_afiliado}}
+                </td>
+              </tr>
+              <tr>
+                <td style="width: 70%; padding-top: 10px">Aporte Cta.Indiv.</td>
+                <td class="right" style="width: 30%; padding-top: 10px">
+                  {{ aporte_indiv }}
+                </td>
+              </tr>
+              <tr>
+                <td>Comisión por flujo</td>
+                <td class="right">{{ comision_flujo }}</td>
+              </tr>
+              <tr>
+                <td>Prima de seguro</td>
+                <td class="right">{{ prima_seguro }}</td>
+              </tr>
+              <tr style="border-top: 1px solid #000; font-weight: bold">
+                <td style="padding-top: 5px">Total AFP</td>
+                <td class="right" style="padding-top: 5px">{{ total_afp }}</td>
+              </tr>
+            </table>
+          </td>
+          <td style="width: 25%; border: 1px solid #000; padding: 0">
+            <table class="payslip-table" style="width: 100%">
+              <tr>
+                <td style="font-weight: bold; border-bottom: 1px solid #000">
+                  Descuentos Personales
+                </td>
+              </tr>
+              <tr>
+                <td style="width: 70%; padding-top: 10px">
+                  Descuento dominical
+                </td>
+                <td class="right" style="width: 30%; padding-top: 10px">
+                  {{ descuento_dominical }}
+                </td>
+              </tr>
+              <tr>
+                <td>Dias vacacionales</td>
+                <td class="right">{{ dias_vacaciones }}</td>
+              </tr>
+            </table>
+          </td>
+          <td style="width: 25%; border: 1px solid #000; padding: 0">
+            <table class="payslip-table" style="width: 100%">
+              <tr>
+                <td style="font-weight: bold; border-bottom: 1px solid #000">
+                  Días efectivos lab. y no lab.
+                </td>
+              </tr>
+              <tr>
+                <td style="padding-top: 10px">
+                  <div
+                    style="
+                      border: 1px solid #000;
+                      text-align: center;
+                      padding: 5px;
+                      margin: 0 5px 10px 5px;
+                    "
+                  >
+                    <div>Días Trab.</div>
+                    <div style="font-size: 14pt; font-weight: bold">
+                      {{ worked_days }}
+                    </div>
+                  </div>
+                </td>
+              </tr>
+
+              <tr>
+                <td style="padding-top: 70px">&nbsp;</td>
+              </tr>
+
+              <tr>
+                <td style="padding: 5px">
+                  <div style="border: 1px solid #000">
+                    <div
+                      style="
+                        font-weight: bold;
+                        text-align: center;
+                        padding: 5px;
+                      "
+                    >
+                      Aporte Patronal
+                    </div>
+                    <div style="border-top: 1px solid #000; padding: 5px">
+                      <table style="width: 100%; font-size: 9pt">
+                        <tr>
+                          <td style="width: 50%; padding: 0">RPS. 9%</td>
+                          <td
+                            style="
+                              width: 50%;
+                              text-align: right;
+                              font-weight: bold;
+                              padding: 0;
+                            "
+                          >
+                            {{ aporte_patronal }}
+                          </td>
+                        </tr>
+                      </table>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            </table>
+          </td>
+        </tr>
+      </table>
+      <table
+        class="payslip-table"
+        style="margin-top: 10px; width: 100%; table-layout: fixed"
+      >
+        <tr>
+          <td
+            style="
+              width: 33.33%;
+              border: 1px solid #000;
+              font-weight: bold;
+              padding: 5px;
+            "
+          >
+            TOTAL
+            <span style="float: right">{{total_bruto}}</span>
+          </td>
+
+          <td
+            style="
+              width: 33.33%;
+              border: 1px solid #000;
+              border-left: none;
+              font-weight: bold;
+              padding: 5px;
+            "
+          >
+            TOT. DCTOS.
+            <span style="float: right">{{total_descuento}}</span>
+          </td>
+
+          <td
+            style="
+              width: 33.33%;
+              border: 2px solid #000;
+              border-left: none;
+              font-weight: bold;
+              padding: 5px;
+            "
+          >
+            <span style="font-size: 10pt">LIQUIDO A PAGAR</span>
+            <span style="float: right; font-size: 11pt">
+              {{total_liquido}}</span
+            >
+          </td>
+        </tr>
+      </table>
+    </div>
+  </body>
+</html>

@@ -11,6 +11,17 @@ from common.response_handler import APIResponse
 from apps.audit_logs.models import AuditLog
 from datetime import datetime
 from decimal import Decimal
+from django.template.loader import render_to_string
+from django.http import HttpResponse
+from django.core.files.base import ContentFile
+from xhtml2pdf import pisa
+from io import BytesIO
+from django.utils import timezone
+
+MONTHS_ES = [
+    "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+    "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"
+]
 
 REQUIRED_PAYSLIP_COLUMNS = {
     "dni": ["DNI"],
@@ -406,3 +417,124 @@ class PayslipUploadViewSet(viewsets.ViewSet):
             ),
             status=status.HTTP_200_OK
         )
+
+    @action(detail=False, methods=['get'], url_path='view-payslip')
+    def view_payslip(self, request):
+                payslip_id = request.query_params.get('id')
+                if not payslip_id:
+                    return Response({'error': 'Falta el parámetro id'}, status=status.HTTP_400_BAD_REQUEST)
+
+                try:
+                    payslip = Payslip.objects.get(id=payslip_id)
+                except Payslip.DoesNotExist:
+                    return Response({'error': 'Boleta no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+
+                html = render_to_string('boleta.html', {'boleta': payslip})
+                return HttpResponse(html)    
+
+    @action(detail=False, methods=['get'], url_path='generate-payslip')
+    def generate_payslip(self, request):
+        user = request.user
+
+        if not hasattr(user, 'profile') or user.profile.role != 'user':
+            return Response(
+                APIResponse.error(
+                    message="No tiene permisos para generar boletas.",
+                    code=status.HTTP_403_FORBIDDEN
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        payslip_id = request.query_params.get('id')
+        if not payslip_id:
+            return Response(
+                APIResponse.error(message="Debe proporcionar el parámetro 'id' de la boleta."),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            payslip = Payslip.objects.get(id=payslip_id, profile=user.profile)
+        except Payslip.DoesNotExist:
+            return Response(
+                APIResponse.error(message="Boleta no encontrada o no pertenece al usuario."),
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        profile = user.profile
+        work_details = getattr(profile, 'work_details', None)
+
+        issue_month_name = MONTHS_ES[payslip.issue_date.month - 1]
+        issue_date_es = f"{issue_month_name} {payslip.issue_date.year}"
+        print_date = timezone.now().strftime("%d/%m/%Y")
+
+        remuneracion_total = payslip.amount
+        asignacion_familiar = Decimal("113.00")
+        reintegros = Decimal("585.90")
+
+        total_bruto = remuneracion_total + asignacion_familiar + reintegros
+        aporte_patronal = round(total_bruto * Decimal("0.09"), 2)
+
+        total_descuento = Decimal("197.92") + Decimal("33.45") + Decimal("27.12")
+        total_liquido = total_bruto - total_descuento
+
+        payload = {
+            "issue_date_es": issue_date_es,
+            "print_date": print_date, 
+            'dni': user.profile.dni,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'position': user.profile.position,
+            'description': user.profile.description,
+            'condition': user.profile.condition,
+            'regimen': user.profile.regimen,
+            'category': user.profile.category,
+            "worked_days": work_details.worked_days if work_details else 0,
+            "worked_hours": work_details.worked_hours if work_details else 0,
+            "discount_lateness": (
+                (work_details.discount_lateness or 0) + (work_details.personal_leave_hours or 0)
+            ) if work_details else 0,
+            "start_date": profile.start_date.strftime("%d/%m/%Y") if profile.start_date else "—",
+            "end_date": profile.end_date.strftime("%d/%m/%Y") if profile.end_date else "VIGENTE",
+            "remuneracion_total": payslip.amount,
+            "asignacion_familiar": 113.00,
+            "reintegros": 585.90, 
+            "sistema_pension": profile.descriptionSP or "—",
+            "codigo_afiliado": profile.identification_code or "—",
+            "aporte_individual": 197.92,
+            "comision_flujo": 33.45,
+            "prima_seguro": 27.12,
+            "total_descuento": total_descuento,
+            "descuento_dominical": work_details.sunday_discount if work_details else 0,
+            "dias_vacaciones": work_details.vacation_days if work_details else 0,
+            "aporte_patronal": aporte_patronal,
+            "total_bruto": total_bruto,
+            'total_liquido': total_liquido,
+        }
+
+        html = render_to_string('boleta.html', payload)
+
+        pdf_buffer = BytesIO()
+        pisa_status = pisa.CreatePDF(html, dest=pdf_buffer)
+
+        if pisa_status.err:
+            return Response(
+                APIResponse.error(message="Error al generar el PDF."),
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
+
+        pdf_filename = f"boleta_{payslip.id}.pdf"
+        payslip.pdf_file.save(pdf_filename, ContentFile(pdf_buffer.getvalue()))
+        payslip.view_status = 'generated'
+        payslip.save()
+
+        return Response(
+            APIResponse.success(
+                data={
+                    "id": str(payslip.id),
+                    "pdf_url": payslip.pdf_file.url,
+                    "view_status": payslip.view_status
+                },
+                message="Boleta generada exitosamente."
+            ),
+            status=status.HTTP_200_OK
+        )    
