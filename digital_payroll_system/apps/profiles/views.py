@@ -34,6 +34,19 @@ OPTIONAL_COLUMNS = {
     'email': ['email', 'correo', 'correo electronico']
 }
 
+WORK_DETAILS_COLUMNS = {
+    "dni": ["DNI"],
+    "worked_days": ["DiasTrabajados"],
+    "non_worked_days": ["DiasNoTrabajados"],
+    "worked_hours": ["HorasTrabajados"],
+    "discount_academic_hours": ["DescuentoHorasAcademicas"],
+    "discount_lateness": ["DescuentoTardanzas"],
+    "personal_leave_hours": ["PermisoParticular"],
+    "sunday_discount": ["DescuentoDominical"],
+    "vacation_days": ["DiasVacaciones"],
+    "vacation_hours": ["HorasVacaciones"]
+}
+
 def normalize(s):
     """Quita acentos, espacios y pasa a minúsculas"""
     if not s:
@@ -196,6 +209,121 @@ class ProfileViewSet(viewsets.ViewSet):
         return Response(
             APIResponse.success(
                 message="Procesamiento finalizado.",
+                data={'messages': messages}
+            ),
+            status=status.HTTP_200_OK
+        )
+    
+    @action(detail=False, methods=['post'], url_path='upload-work-details')
+    def upload_work_details(self, request):
+        if not request.user.profile.role == 'admin':
+            return Response(
+                APIResponse.error(
+                    message="No tiene permisos para realizar esta acción.",
+                    code=status.HTTP_403_FORBIDDEN
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        file = request.FILES.get('file')
+        if not file:
+            return Response(
+                APIResponse.error(
+                    message="No se ha enviado ningún archivo.",
+                    code=status.HTTP_400_BAD_REQUEST
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if not file.name.endswith('.xlsx'):
+            return Response(
+                APIResponse.error(
+                    message="El archivo debe ser un Excel (.xlsx).",
+                    code=status.HTTP_400_BAD_REQUEST
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            workbook = load_workbook(filename=file)
+            ws = workbook.active
+        except Exception as e:
+            return Response(
+                APIResponse.error(
+                    message=f"Error al abrir el archivo: {str(e)}",
+                    code=status.HTTP_400_BAD_REQUEST
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        headers = [str(cell.value).strip() if cell.value else '' for cell in ws[1]]
+        normalized_headers = [normalize(h) for h in headers]
+
+        column_map = {}
+        for idx, nh in enumerate(normalized_headers):
+            for field, variants in WORK_DETAILS_COLUMNS.items():
+                if nh in [normalize(v) for v in variants]:
+                    column_map[idx] = field
+
+        missing = [field for field in WORK_DETAILS_COLUMNS.keys() if field not in column_map.values()]
+        if missing:
+            return Response(
+                APIResponse.error(
+                    message=f"Faltan columnas obligatorias en el Excel: {', '.join(missing)}",
+                    code=status.HTTP_400_BAD_REQUEST
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        messages = []
+
+        for row_idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
+            row_data = {column_map[idx]: cell.value for idx, cell in enumerate(row) if idx in column_map}
+
+            dni = to_upper(row_data.get('dni'))
+
+            if not dni:
+                messages.append(f"Fila {row_idx}: DNI es obligatorio. Se saltó la fila.")
+                continue
+
+            try:
+                profile = Profile.objects.get(dni=dni)
+            except Profile.DoesNotExist:
+                messages.append(f"Fila {row_idx}: No se encontró Profile con DNI {dni}. Se saltó la fila.")
+                continue
+
+            work_data = {
+                'worked_days': int(row_data.get('worked_days') or 0),
+                'non_worked_days': int(row_data.get('non_worked_days') or 0),
+                'worked_hours': int(row_data.get('worked_hours') or 0),
+                'discount_academic_hours': int(row_data.get('discount_academic_hours') or 0),
+                'discount_lateness': int(row_data.get('discount_lateness') or 0),
+                'personal_leave_hours': int(row_data.get('personal_leave_hours') or 0),
+                'sunday_discount': int(row_data.get('sunday_discount') or 0),
+                'vacation_days': int(row_data.get('vacation_days') or 0),
+                'vacation_hours': int(row_data.get('vacation_hours') or 0),
+            }
+
+            work_details, created = ProfileWorkDetails.objects.update_or_create(
+                profile=profile,
+                defaults=work_data
+            )
+
+            if created:
+                messages.append(f"Fila {row_idx}: WorkDetails para DNI {dni} creado.")
+            else:
+                messages.append(f"Fila {row_idx}: WorkDetails para DNI {dni} actualizado.")
+
+        description_text = "\n".join(messages)
+        AuditLog.objects.create(
+            profile=request.user.profile,
+            action="CARGA DE WORK DETAILS",
+            description=description_text
+        )
+
+        return Response(
+            APIResponse.success(
+                message="Procesamiento de WorkDetails finalizado.",
                 data={'messages': messages}
             ),
             status=status.HTTP_200_OK

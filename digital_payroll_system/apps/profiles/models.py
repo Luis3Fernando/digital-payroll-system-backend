@@ -37,3 +37,19 @@ class Profile(BaseModel):
 
     def __str__(self):
         return f"{self.user.get_full_name() if self.user else 'No User'} ({self.dni})"
+
+class ProfileWorkDetails(BaseModel):
+    profile = models.OneToOneField(Profile, on_delete=models.CASCADE, related_name='work_details')
+
+    worked_days = models.PositiveIntegerField(default=0)
+    non_worked_days = models.PositiveIntegerField(default=0)
+    worked_hours = models.PositiveIntegerField(default=0)
+    discount_academic_hours = models.PositiveIntegerField(default=0)
+    discount_lateness = models.PositiveIntegerField(default=0)
+    personal_leave_hours = models.PositiveIntegerField(default=0)
+    sunday_discount = models.PositiveIntegerField(default=0)
+    vacation_days = models.PositiveIntegerField(default=0)
+    vacation_hours = models.PositiveIntegerField(default=0)
+
+    def __str__(self):
+        return f"Work details for {self.profile.user.get_full_name() or self.profile.dni}"
