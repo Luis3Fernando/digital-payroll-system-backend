@@ -17,6 +17,7 @@ from django.core.files.base import ContentFile
 from xhtml2pdf import pisa
 from io import BytesIO
 from django.utils import timezone
+from django.shortcuts import get_object_or_404
 
 MONTHS_ES = [
     "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
@@ -305,7 +306,6 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 "profile_id": str(p.profile.id),
                 "profile_dni": p.profile.dni,
                 "issue_date": p.issue_date.isoformat(),
-                "pdf_file": p.pdf_file,
                 "view_status": p.view_status,
                 "concept": p.concept,
                 "amount": float(p.amount),
@@ -420,17 +420,71 @@ class PayslipUploadViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['get'], url_path='view-payslip')
     def view_payslip(self, request):
-                payslip_id = request.query_params.get('id')
-                if not payslip_id:
-                    return Response({'error': 'Falta el parámetro id'}, status=status.HTTP_400_BAD_REQUEST)
+        payslip_id = request.query_params.get('id')
+        if not payslip_id:
+            return Response(
+                APIResponse.error(
+                    message="Debe proporcionar el ID de la boleta.",
+                    code=status.HTTP_400_BAD_REQUEST
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-                try:
-                    payslip = Payslip.objects.get(id=payslip_id)
-                except Payslip.DoesNotExist:
-                    return Response({'error': 'Boleta no encontrada'}, status=status.HTTP_404_NOT_FOUND)
+        try:
+            UUID(payslip_id, version=4)
+        except ValueError:
+            return Response(
+                APIResponse.error(
+                    message="El ID proporcionado no es un UUID válido.",
+                    code=status.HTTP_400_BAD_REQUEST
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
 
-                html = render_to_string('boleta.html', {'boleta': payslip})
-                return HttpResponse(html)    
+        payslip = get_object_or_404(Payslip, id=payslip_id)
+
+        if payslip.profile.user != request.user:
+            return Response(
+                APIResponse.error(
+                    message="No tiene permiso para acceder a esta boleta.",
+                    code=status.HTTP_403_FORBIDDEN
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        if not payslip.pdf_file:
+            return Response(
+                APIResponse.error(
+                    message="La boleta no tiene un archivo PDF asociado.",
+                    code=status.HTTP_400_BAD_REQUEST
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if payslip.view_status != 'seen':
+            payslip.view_status = 'seen'
+            payslip.save()
+
+        AuditLog.objects.create(
+            profile=request.user.profile,
+            action="VISUALIZAR BOLETA",
+            description=f"El usuario {request.user.username} visualizó la boleta {payslip.id} del periodo {payslip.issue_date}."
+        )
+
+        return Response(
+            APIResponse.success(
+                message="Boleta visualizada correctamente.",
+                data={
+                    "payslip_id": str(payslip.id),
+                    "pdf_url": request.build_absolute_uri(payslip.pdf_file.url),
+                    "status": payslip.view_status,
+                    "issue_date": payslip.issue_date,
+                    "concept": payslip.concept,
+                    "amount": payslip.amount
+                }
+            ),
+            status=status.HTTP_200_OK
+        )
 
     @action(detail=False, methods=['get'], url_path='generate-payslip')
     def generate_payslip(self, request):
@@ -526,6 +580,15 @@ class PayslipUploadViewSet(viewsets.ViewSet):
         payslip.pdf_file.save(pdf_filename, ContentFile(pdf_buffer.getvalue()))
         payslip.view_status = 'generated'
         payslip.save()
+
+        AuditLog.objects.create(
+            profile=getattr(request.user, 'profile', None),
+            action="GENERAR BOLETA",
+            description=(
+                f"El usuario {request.user.first_name} {request.user.last_name} generó la boleta con ID {payslip.id}, "
+                f"correspondiente al periodo {payslip.issue_date}."
+            )
+        )
 
         return Response(
             APIResponse.success(
