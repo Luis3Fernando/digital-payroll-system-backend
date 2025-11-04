@@ -21,8 +21,10 @@ class Profile(BaseModel):
 
     position = models.CharField(max_length=100, null=True, blank=True)
     description = models.TextField(null=True, blank=True)
+    descriptionSP = models.TextField(null=True, blank=True)
+    start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
-    payment_date = models.DateField(null=True, blank=True)
+    resigned_date = models.DateField(null=True, blank=True)
     resigned = models.BooleanField(default=False)
 
     regimen = models.CharField(max_length=100, null=True, blank=True)
