@@ -36,7 +36,12 @@ class ProfileAdmin(admin.ModelAdmin):
 
     ordering = ('-created_at',)
 
+    fields = ('dni', 'created_at', 'updated_at')
+
     def get_full_name(self, obj):
-        return f"{obj.user.first_name} {obj.user.last_name}" if obj.user else "No linked user"
-    
+        if obj.user:
+            full_name = f"{obj.user.first_name} {obj.user.last_name}".strip()
+            return full_name if full_name else "(No name)"
+        return "No linked user"
+
     get_full_name.short_description = 'Full Name'
