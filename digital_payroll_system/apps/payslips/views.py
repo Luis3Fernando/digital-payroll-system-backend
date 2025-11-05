@@ -1,7 +1,6 @@
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
-from django.core.exceptions import ValidationError
 from uuid import UUID
 from openpyxl import load_workbook
 from apps.profiles.models import Profile
@@ -12,7 +11,6 @@ from apps.audit_logs.models import AuditLog
 from datetime import datetime
 from decimal import Decimal
 from django.template.loader import render_to_string
-from django.http import HttpResponse
 from django.core.files.base import ContentFile
 from xhtml2pdf import pisa
 from io import BytesIO
