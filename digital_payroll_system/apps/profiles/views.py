@@ -5,6 +5,7 @@ from rest_framework.response import Response
 from datetime import datetime
 from openpyxl import load_workbook
 import unicodedata
+from django.db.models import Q
 
 from .serializers import *
 from .models import *
@@ -325,6 +326,67 @@ class ProfileViewSet(viewsets.ViewSet):
             APIResponse.success(
                 message="Procesamiento de WorkDetails finalizado.",
                 data={'messages': messages}
+            ),
+            status=status.HTTP_200_OK
+        )
+
+    @action(detail=False, methods=['get'], url_path='list-users')
+    def list_users(self, request):
+        if not request.user.profile.role == 'admin':
+            return Response(
+                APIResponse.error(
+                    message="No tiene permisos para realizar esta acción.",
+                    code=status.HTTP_403_FORBIDDEN
+                ),
+                status=status.HTTP_403_FORBIDDEN
+            )
+
+        page = int(request.query_params.get('page', 1))
+        page_size = 20
+        search = request.query_params.get('search', '').strip()
+
+        offset = (page - 1) * page_size
+        limit = offset + page_size
+
+        queryset = Profile.objects.select_related('user').filter(role='user').order_by('-created_at')
+
+        if search:
+            queryset = queryset.filter(
+                Q(user__first_name__icontains=search) |
+                Q(user__last_name__icontains=search)
+            )
+
+        total = queryset.count()
+        profiles = queryset[offset:limit]
+
+        results = []
+        for p in profiles:
+            results.append({
+                "id": str(p.id),
+                "dni": p.dni,
+                "first_name": p.user.first_name if p.user else None,
+                "last_name": p.user.last_name if p.user else None,
+                "email": p.user.email if p.user else None,
+                "role": p.role,
+                "condition": p.condition,
+                "position": p.position,
+                "created_at": p.created_at.isoformat() if p.created_at else None,
+            })
+
+        pagination = {
+            "current_page": page,
+            "page_size": page_size,
+            "total_items": total,
+            "total_pages": (total + page_size - 1) // page_size,
+            "has_next": limit < total,
+            "has_previous": page > 1
+        }
+
+        return Response(
+            APIResponse.success(
+                data=results,
+                message=f"{len(results)} usuarios obtenidos.",
+                meta={"pagination": pagination}
             ),
             status=status.HTTP_200_OK
         )
