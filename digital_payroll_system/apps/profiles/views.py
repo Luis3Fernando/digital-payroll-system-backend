@@ -390,3 +390,59 @@ class ProfileViewSet(viewsets.ViewSet):
             ),
             status=status.HTTP_200_OK
         )
+
+    @action(detail=False, methods=['get'], url_path='me')
+    def me(self, request):
+        profile = getattr(request.user, 'profile', None)
+        if not profile:
+            return Response(
+                APIResponse.error(
+                    message="No se encontró el perfil del usuario.",
+                    code=status.HTTP_404_NOT_FOUND
+                ),
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+        work_details = getattr(profile, 'work_details', None)
+
+        data = {
+            "id": str(profile.id),
+            "dni": profile.dni,
+            "role": profile.role,
+            "first_name": request.user.first_name,
+            "last_name": request.user.last_name,
+            "email": request.user.email,
+            "username": request.user.username,
+            "position": profile.position,
+            "description": profile.description,
+            "descriptionSP": profile.descriptionSP,
+            "start_date": profile.start_date.isoformat() if profile.start_date else None,
+            "end_date": profile.end_date.isoformat() if profile.end_date else None,
+            "resigned_date": profile.resigned_date.isoformat() if profile.resigned_date else None,
+            "resigned": profile.resigned,
+            "regimen": profile.regimen,
+            "category": profile.category,
+            "condition": profile.condition,
+            "identification_code": profile.identification_code,
+            "establishment": profile.establishment,
+            "is_active": profile.is_active,
+            "work_details": {
+                "worked_days": work_details.worked_days if work_details else 0,
+                "non_worked_days": work_details.non_worked_days if work_details else 0,
+                "worked_hours": work_details.worked_hours if work_details else 0,
+                "discount_academic_hours": work_details.discount_academic_hours if work_details else 0,
+                "discount_lateness": work_details.discount_lateness if work_details else 0,
+                "personal_leave_hours": work_details.personal_leave_hours if work_details else 0,
+                "sunday_discount": work_details.sunday_discount if work_details else 0,
+                "vacation_days": work_details.vacation_days if work_details else 0,
+                "vacation_hours": work_details.vacation_hours if work_details else 0,
+            } if work_details else None
+        }
+
+        return Response(
+            APIResponse.success(
+                data=data,
+                message="Perfil obtenido correctamente."
+            ),
+            status=status.HTTP_200_OK
+        )

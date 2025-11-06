@@ -388,7 +388,6 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 "profile_id": str(p.profile.id),
                 "profile_dni": p.profile.dni,
                 "issue_date": p.issue_date.isoformat(),
-                "pdf_file": p.pdf_file,
                 "view_status": p.view_status,
                 "concept": p.concept,
                 "amount": float(p.amount),
