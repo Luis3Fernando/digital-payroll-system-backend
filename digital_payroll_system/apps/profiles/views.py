@@ -6,6 +6,8 @@ from datetime import datetime
 from openpyxl import load_workbook
 import unicodedata
 from django.db.models import Q
+from django.core.validators import validate_email
+from django.core.exceptions import ValidationError
 
 from .serializers import *
 from .models import *
@@ -443,6 +445,51 @@ class ProfileViewSet(viewsets.ViewSet):
             APIResponse.success(
                 data=data,
                 message="Perfil obtenido correctamente."
+            ),
+            status=status.HTTP_200_OK
+        )
+    
+    @action(detail=False, methods=['patch'], url_path='update-email')
+    def update_email(self, request):
+        user = request.user
+        email = request.data.get("email")
+
+        if not email:
+            return Response(
+                APIResponse.error(
+                    message="Debe proporcionar un correo electrónico.",
+                    code=status.HTTP_400_BAD_REQUEST
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        try:
+            validate_email(email)
+        except ValidationError:
+            return Response(
+                APIResponse.error(
+                    message="El formato del correo electrónico es inválido.",
+                    code=status.HTTP_400_BAD_REQUEST
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if User.objects.exclude(id=user.id).filter(email=email).exists():
+            return Response(
+                APIResponse.error(
+                    message="El correo electrónico ya está siendo usado por otro usuario.",
+                    code=status.HTTP_409_CONFLICT
+                ),
+                status=status.HTTP_409_CONFLICT
+            )
+
+        user.email = email
+        user.save(update_fields=["email"])
+
+        return Response(
+            APIResponse.success(
+                data={"email": email},
+                message="Correo electrónico actualizado correctamente."
             ),
             status=status.HTTP_200_OK
         )
