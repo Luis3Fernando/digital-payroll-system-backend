@@ -15,6 +15,7 @@ class Profile(BaseModel):
         ('user', 'User'),
         ('admin', 'Admin'),
     )
+    last_login = models.DateTimeField(null=True, blank=True)
 
     dni = models.CharField(max_length=15, unique=True, null=True, blank=True)
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default='user')

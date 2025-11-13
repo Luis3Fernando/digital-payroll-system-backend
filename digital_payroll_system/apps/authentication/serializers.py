@@ -30,9 +30,11 @@ class LoginSerializer(serializers.Serializer):
             'refresh': str(refresh),
             'user': {
                 'id': user.id,
-                'username': user.username,
+                'username': user.first_name + " " + user.last_name,
                 'dni': dni,
                 'email': user.email,
+                'last_login': profile.last_login,
+                'position': profile.position,
                 'role': getattr(profile, 'role', None),
             }
         }

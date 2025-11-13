@@ -3,6 +3,7 @@ from rest_framework.response import Response
 from .serializers import *
 from common.response_handler import APIResponse
 
+from django.utils import timezone
 from django.contrib.auth import get_user_model
 
 User = get_user_model()
@@ -13,6 +14,21 @@ class AuthViewSet(viewsets.ViewSet):
         serializer = LoginSerializer(data=request.data)
         if serializer.is_valid():
             data = serializer.validated_data
+            dni = data["user"]["dni"]
+
+            try:
+                profile = Profile.objects.get(dni=dni)
+                profile.last_login = timezone.now()
+                profile.save(update_fields=["last_login"])
+            except Profile.DoesNotExist:
+                return Response(
+                    APIResponse.error(
+                        message="No se encontró el perfil del usuario.",
+                        code=status.HTTP_404_NOT_FOUND
+                    ),
+                    status=status.HTTP_404_NOT_FOUND
+                )
+
             return Response(
                 APIResponse.success(
                     data=data,
