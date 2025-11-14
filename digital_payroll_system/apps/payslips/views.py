@@ -383,6 +383,11 @@ class PayslipUploadViewSet(viewsets.ViewSet):
 
         results = []
         for p in payslips:
+            try:
+                pdf_url = request.build_absolute_uri(p.pdf_file.url) if p.pdf_file else None
+            except Exception:
+                pdf_url = None
+
             results.append({
                 "id": str(p.id),
                 "profile_id": str(p.profile.id),
@@ -394,7 +399,8 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 "data_source": p.data_source,
                 "payroll_type": p.payroll_type,
                 "data_type": p.data_type,
-                "position_order": p.position_order
+                "position_order": p.position_order,
+                "pdf_url": pdf_url,
             })
 
         pagination = {
