@@ -347,8 +347,17 @@ class ProfileViewSet(viewsets.ViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        page = int(request.query_params.get('page', 1))
-        page_size = 20
+        try:
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 20))
+            if page < 1:
+                page = 1
+            if page_size < 1:
+                page_size = 20
+        except ValueError:
+            page = 1
+            page_size = 20
+
         search = request.query_params.get('search', '').strip()
 
         offset = (page - 1) * page_size
@@ -396,6 +405,7 @@ class ProfileViewSet(viewsets.ViewSet):
             ),
             status=status.HTTP_200_OK
         )
+
 
     @action(detail=False, methods=['get'], url_path='me')
     def me(self, request):

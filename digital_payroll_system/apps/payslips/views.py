@@ -165,9 +165,23 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 messages.append(f"Fila {row_idx}: Monto inválido '{row_data.get('amount')}'. Se saltó la fila.")
                 continue
 
-            payslip = Payslip.objects.create(
+            concept = str(row_data.get('concept')).upper()
+
+            if Payslip.objects.filter(
                 profile=profile,
-                concept=str(row_data.get('concept')).upper(),
+                concept=concept,
+                issue_date__year=issue_date.year,
+                issue_date__month=issue_date.month
+            ).exists():
+                messages.append(
+                    f"Fila {row_idx}: Ya existe una boleta con el concepto '{concept}' "
+                    f"para el periodo {issue_date.strftime('%Y-%m')}. Se saltó la fila."
+                )
+                continue
+
+            Payslip.objects.create(
+                profile=profile,
+                concept=concept,
                 amount=amount,
                 data_source=str(row_data.get('data_source')).upper(),
                 payroll_type=str(row_data.get('payroll_type')).upper(),
@@ -177,7 +191,9 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 pdf_file='',
                 view_status='unseen'
             )
+
             messages.append(f"Fila {row_idx}: Boleta para DNI {dni} creada.")
+
 
         description_text = "\n".join(messages)
         AuditLog.objects.create(
@@ -205,8 +221,14 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        total_deleted = Payslip.objects.count() 
-        Payslip.objects.all().delete() 
+        payslips = Payslip.objects.all()
+        total_deleted = payslips.count()
+
+        for ps in payslips:
+            if ps.pdf_file:
+                ps.pdf_file.delete(save=False)
+
+        payslips.delete()
 
         AuditLog.objects.create(
             profile=request.user.profile,
@@ -291,12 +313,22 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        page = int(request.query_params.get('page', 1))
-        page_size = 20
+        try:
+            page = int(request.query_params.get('page', 1))
+            page_size = int(request.query_params.get('page_size', 20))
+            if page < 1:
+                page = 1
+            if page_size < 1:
+                page_size = 20
+        except ValueError:
+            page = 1
+            page_size = 20
+
         offset = (page - 1) * page_size
         limit = offset + page_size
 
         queryset = Payslip.objects.select_related('profile').order_by('-issue_date')
+
         total = queryset.count()
         payslips = queryset[offset:limit]
 
@@ -313,7 +345,7 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 "data_source": p.data_source,
                 "payroll_type": p.payroll_type,
                 "data_type": p.data_type,
-                "position_order": p.position_order
+                "position_order": p.position_order,
             })
 
         pagination = {
@@ -333,7 +365,7 @@ class PayslipUploadViewSet(viewsets.ViewSet):
             ),
             status=status.HTTP_200_OK
         )
-    
+
     @action(detail=False, methods=['get'], url_path='my-payslips')
     def my_payslips(self, request):
         user = request.user
