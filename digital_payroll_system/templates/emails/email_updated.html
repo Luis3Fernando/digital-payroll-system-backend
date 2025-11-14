@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        background: #f4f4f4;
+        padding: 20px;
+      }
+      .card {
+        max-width: 520px;
+        margin: 0 auto;
+        background: #ffffff;
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: 0 3px 12px rgba(0, 0, 0, 0.1);
+      }
+      h2 {
+        color: #333;
+        text-align: center;
+      }
+      p {
+        color: #555;
+        line-height: 1.6;
+      }
+      .footer {
+        margin-top: 20px;
+        font-size: 13px;
+        color: #888;
+        text-align: center;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h2>Correo Actualizado</h2>
+      <p>Hola <strong>{{ full_name }}</strong>,</p>
+      <p>
+        Te informamos que tu correo electrónico asociado al sistema de
+        <strong>Boletas Digitales</strong> ha sido actualizado exitosamente.
+      </p>
+      <p>
+        Tu nuevo correo registrado es:<br />
+        <strong>{{ new_email }}</strong>
+      </p>
+      <p>
+        Si tú no realizaste este cambio, por favor comunícate de inmediato con
+        el área de soporte.
+      </p>
+      <div class="footer">Sistema de Boletas Digitales</div>
+    </div>
+  </body>
+</html>

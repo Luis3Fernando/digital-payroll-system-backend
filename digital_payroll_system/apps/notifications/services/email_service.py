@@ -25,3 +25,40 @@ def send_payslip_email(user, secure_url, qr_bytes, issue_date):
     email.attach(qr_image)
 
     email.send()
+
+def send_email_updated_notification(user, new_email):
+    subject = "Tu correo ha sido actualizado correctamente"
+
+    html_content = render_to_string("emails/email_updated.html", {
+        "full_name": user.get_full_name(),
+        "new_email": new_email
+    })
+
+    email = EmailMultiAlternatives(
+        subject=subject,
+        body="Tu correo ha sido actualizado.",
+        from_email=settings.EMAIL_HOST_USER,
+        to=[new_email]
+    )
+
+    email.attach_alternative(html_content, "text/html")
+    email.send()
+
+
+def send_password_changed_notification(user):
+    subject = "Tu contraseña ha sido modificada"
+
+    html_content = render_to_string("emails/password_changed.html", {
+        "full_name": user.get_full_name(),
+        "email": user.email,
+    })
+
+    email = EmailMultiAlternatives(
+        subject=subject,
+        body="Tu contraseña fue cambiada.",
+        from_email=settings.EMAIL_HOST_USER,
+        to=[user.email]
+    )
+
+    email.attach_alternative(html_content, "text/html")
+    email.send()

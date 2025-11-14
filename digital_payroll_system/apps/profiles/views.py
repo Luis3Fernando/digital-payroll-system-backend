@@ -13,6 +13,10 @@ from .serializers import *
 from .models import *
 from apps.audit_logs.models import AuditLog
 from common.response_handler import APIResponse
+from apps.notifications.services.email_service import (
+    send_email_updated_notification,
+    send_password_changed_notification
+)
 
 REQUIRED_COLUMNS = {
     'dni': ['dni'],
@@ -486,6 +490,8 @@ class ProfileViewSet(viewsets.ViewSet):
         user.email = email
         user.save(update_fields=["email"])
 
+        send_email_updated_notification(user, email)
+
         return Response(
             APIResponse.success(
                 data={"email": email},
@@ -516,6 +522,8 @@ class ProfileViewSet(viewsets.ViewSet):
 
         user.set_password(new_password)
         user.save()
+
+        send_password_changed_notification(user)
 
         return Response(
             APIResponse.success(
