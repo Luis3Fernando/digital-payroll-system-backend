@@ -18,7 +18,8 @@ from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from apps.notifications.services.email_service import send_payslip_email
 from apps.notifications.services.qr_service import generate_qr_code
-
+from django.db.models import Q, F, Value, CharField
+from django.db.models.functions import Concat
 
 MONTHS_ES = [
     "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
@@ -316,28 +317,75 @@ class PayslipUploadViewSet(viewsets.ViewSet):
         try:
             page = int(request.query_params.get('page', 1))
             page_size = int(request.query_params.get('page_size', 20))
-            if page < 1:
-                page = 1
-            if page_size < 1:
-                page_size = 20
         except ValueError:
             page = 1
             page_size = 20
+        
+        page = max(page, 1)
+        page_size = max(page_size, 1)
 
-        offset = (page - 1) * page_size
-        limit = offset + page_size
+        dni = request.query_params.get('dni')
+        name = request.query_params.get('name')
+        concept = request.query_params.get('concept')
+        status_view = request.query_params.get('status')
+        month = request.query_params.get('month')
+        year = request.query_params.get('year')
 
-        queryset = Payslip.objects.select_related('profile').order_by('-issue_date')
+        queryset = Payslip.objects.select_related('profile', 'profile__user').order_by('-issue_date')
+
+        if dni:
+            queryset = queryset.filter(profile__dni__icontains=dni)
+
+        queryset = queryset.annotate(
+            full_name_concat=Concat(
+                F('profile__user__first_name'),
+                Value(' '),
+                F('profile__user__last_name'),
+                output_field=CharField()
+            )
+        )
+
+        if name:
+            tokens = [t.strip() for t in name.split() if t.strip()]
+            for token in tokens: 
+                queryset = queryset.filter(full_name_concat__icontains=token)
+
+
+        if concept:
+            queryset = queryset.filter(concept__icontains=concept)
+
+        if status_view:
+            queryset = queryset.filter(view_status=status_view)
+
+        if month:
+            try:
+                month = int(month)
+                queryset = queryset.filter(issue_date__month=month)
+            except:
+                pass
+
+        if year:
+            try:
+                year = int(year)
+                queryset = queryset.filter(issue_date__year=year)
+            except:
+                pass
 
         total = queryset.count()
-        payslips = queryset[offset:limit]
+        offset = (page - 1) * page_size
+        payslips = queryset[offset: offset + page_size]
 
         results = []
+
         for p in payslips:
+            user = p.profile.user
+            full_name = f"{user.first_name} {user.last_name}".strip() if user else None
+            
             results.append({
                 "id": str(p.id),
                 "profile_id": str(p.profile.id),
                 "profile_dni": p.profile.dni,
+                "full_name": full_name,
                 "issue_date": p.issue_date.isoformat(),
                 "view_status": p.view_status,
                 "concept": p.concept,
@@ -353,7 +401,7 @@ class PayslipUploadViewSet(viewsets.ViewSet):
             "page_size": page_size,
             "total_items": total,
             "total_pages": (total + page_size - 1) // page_size,
-            "has_next": limit < total,
+            "has_next": offset + page_size < total,
             "has_previous": page > 1
         }
 
