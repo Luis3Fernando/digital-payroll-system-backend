@@ -381,6 +381,11 @@ class PayslipUploadViewSet(viewsets.ViewSet):
             user = p.profile.user
             full_name = f"{user.first_name} {user.last_name}".strip() if user else None
             
+            try:
+                pdf_url = request.build_absolute_uri(p.pdf_file.url) if p.pdf_file else None
+            except Exception:
+                pdf_url = None
+            
             results.append({
                 "id": str(p.id),
                 "profile_id": str(p.profile.id),
@@ -394,6 +399,7 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 "payroll_type": p.payroll_type,
                 "data_type": p.data_type,
                 "position_order": p.position_order,
+                "pdf_url": pdf_url,
             })
 
         pagination = {
@@ -529,7 +535,10 @@ class PayslipUploadViewSet(viewsets.ViewSet):
 
         payslip = get_object_or_404(Payslip, id=payslip_id)
 
-        if payslip.profile.user != request.user:
+        is_admin = request.user.profile.role == 'admin'
+        is_owner = payslip.profile.user == request.user
+
+        if not is_owner and not is_admin:
             return Response(
                 APIResponse.error(
                     message="No tiene permiso para acceder a esta boleta.",
@@ -546,15 +555,26 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 ),
                 status=status.HTTP_400_BAD_REQUEST
             )
-
         if payslip.view_status != 'seen':
             payslip.view_status = 'seen'
             payslip.save()
 
+        if is_admin and not is_owner:
+            description = (
+                f"El administrador {request.user.username} visualizó y marcó como vista "
+                f"la boleta {payslip.id} perteneciente al usuario {payslip.profile.user.username} "
+                f"del periodo {payslip.issue_date}."
+            )
+        else:
+            description = (
+                f"El usuario {request.user.username} visualizó la boleta "
+                f"{payslip.id} del periodo {payslip.issue_date}."
+            )
+
         AuditLog.objects.create(
             profile=request.user.profile,
             action="VISUALIZAR BOLETA",
-            description=f"El usuario {request.user.username} visualizó la boleta {payslip.id} del periodo {payslip.issue_date}."
+            description=description
         )
 
         return Response(
@@ -572,11 +592,16 @@ class PayslipUploadViewSet(viewsets.ViewSet):
             status=status.HTTP_200_OK
         )
 
+
     @action(detail=False, methods=['get'], url_path='generate-payslip')
     def generate_payslip(self, request):
         user = request.user
+        profile = user.profile
 
-        if not hasattr(user, 'profile') or user.profile.role != 'user':
+        is_admin = profile.role == 'admin'
+        is_user = profile.role == 'user'
+
+        if not (is_admin or is_user):
             return Response(
                 APIResponse.error(
                     message="No tiene permisos para generar boletas.",
@@ -593,15 +618,20 @@ class PayslipUploadViewSet(viewsets.ViewSet):
             )
 
         try:
-            payslip = Payslip.objects.get(id=payslip_id, profile=user.profile)
+            if is_admin:
+                payslip = Payslip.objects.get(id=payslip_id)
+            else:
+                payslip = Payslip.objects.get(id=payslip_id, profile=profile)
         except Payslip.DoesNotExist:
             return Response(
-                APIResponse.error(message="Boleta no encontrada o no pertenece al usuario."),
+                APIResponse.error(message="Boleta no encontrada o no tiene permiso para generarla."),
                 status=status.HTTP_404_NOT_FOUND
             )
 
-        profile = user.profile
-        work_details = getattr(profile, 'work_details', None)
+        payslip_owner_profile = payslip.profile
+        payslip_owner_user = payslip_owner_profile.user
+
+        work_details = getattr(payslip_owner_profile, 'work_details', None)
 
         issue_month_name = MONTHS_ES[payslip.issue_date.month - 1]
         issue_date_es = f"{issue_month_name} {payslip.issue_date.year}"
@@ -610,36 +640,37 @@ class PayslipUploadViewSet(viewsets.ViewSet):
         remuneracion_total = payslip.amount
         asignacion_familiar = Decimal("113.00")
         reintegros = Decimal("585.90")
-
         total_bruto = remuneracion_total + asignacion_familiar + reintegros
-        aporte_patronal = round(total_bruto * Decimal("0.09"), 2)
 
+        aporte_patronal = round(total_bruto * Decimal("0.09"), 2)
         total_descuento = Decimal("197.92") + Decimal("33.45") + Decimal("27.12")
         total_liquido = total_bruto - total_descuento
 
         payload = {
             "issue_date_es": issue_date_es,
-            "print_date": print_date, 
-            'dni': user.profile.dni,
-            'first_name': user.first_name,
-            'last_name': user.last_name,
-            'position': user.profile.position,
-            'description': user.profile.description,
-            'condition': user.profile.condition,
-            'regimen': user.profile.regimen,
-            'category': user.profile.category,
+            "print_date": print_date,
+            "dni": payslip_owner_profile.dni,
+            "first_name": payslip_owner_user.first_name,
+            "last_name": payslip_owner_user.last_name,
+            "position": payslip_owner_profile.position,
+            "description": payslip_owner_profile.description,
+            "condition": payslip_owner_profile.condition,
+            "regimen": payslip_owner_profile.regimen,
+            "category": payslip_owner_profile.category,
+
             "worked_days": work_details.worked_days if work_details else 0,
             "worked_hours": work_details.worked_hours if work_details else 0,
             "discount_lateness": (
                 (work_details.discount_lateness or 0) + (work_details.personal_leave_hours or 0)
             ) if work_details else 0,
-            "start_date": profile.start_date.strftime("%d/%m/%Y") if profile.start_date else "—",
-            "end_date": profile.end_date.strftime("%d/%m/%Y") if profile.end_date else "VIGENTE",
+            "start_date": payslip_owner_profile.start_date.strftime("%d/%m/%Y") if profile.start_date else "—",
+            "end_date": payslip_owner_profile.end_date.strftime("%d/%m/%Y") if profile.end_date else "VIGENTE",
+
             "remuneracion_total": payslip.amount,
             "asignacion_familiar": 113.00,
-            "reintegros": 585.90, 
-            "sistema_pension": profile.descriptionSP or "—",
-            "codigo_afiliado": profile.identification_code or "—",
+            "reintegros": 585.90,
+            "sistema_pension": payslip_owner_profile.descriptionSP or "—",
+            "codigo_afiliado": payslip_owner_profile.identification_code or "—",
             "aporte_individual": 197.92,
             "comision_flujo": 33.45,
             "prima_seguro": 27.12,
@@ -648,11 +679,10 @@ class PayslipUploadViewSet(viewsets.ViewSet):
             "dias_vacaciones": work_details.vacation_days if work_details else 0,
             "aporte_patronal": aporte_patronal,
             "total_bruto": total_bruto,
-            'total_liquido': total_liquido,
+            "total_liquido": total_liquido,
         }
 
         html = render_to_string('boleta.html', payload)
-
         pdf_buffer = BytesIO()
         pisa_status = pisa.CreatePDF(html, dest=pdf_buffer)
 
@@ -671,19 +701,28 @@ class PayslipUploadViewSet(viewsets.ViewSet):
         qr_bytes = generate_qr_code(pdf_url)
 
         send_payslip_email(
-            user=user,
+            user=payslip_owner_user,
             secure_url=pdf_url,
             qr_bytes=qr_bytes,
             issue_date=payslip.issue_date
         )
 
-        AuditLog.objects.create(
-            profile=getattr(request.user, 'profile', None),
-            action="GENERAR BOLETA",
-            description=(
-                f"El usuario {request.user.first_name} {request.user.last_name} generó la boleta con ID {payslip.id}, "
-                f"correspondiente al periodo {payslip.issue_date}."
+        if is_admin and payslip_owner_user != user:
+            description = (
+                f"El administrador {user.first_name} {user.last_name} generó la boleta "
+                f"{payslip.id} perteneciente al usuario {payslip_owner_user.first_name} "
+                f"{payslip_owner_user.last_name} del periodo {payslip.issue_date}."
             )
+        else:
+            description = (
+                f"El usuario {user.first_name} {user.last_name} generó su boleta "
+                f"con ID {payslip.id}, correspondiente al periodo {payslip.issue_date}."
+            )
+
+        AuditLog.objects.create(
+            profile=user.profile,
+            action="GENERAR BOLETA",
+            description=description
         )
 
         return Response(
@@ -696,4 +735,5 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 message="Boleta generada exitosamente."
             ),
             status=status.HTTP_200_OK
-        )    
+        )
+        
