@@ -1,0 +1,17 @@
+<html>
+<body style="font-family: Arial;">
+  <h2>¡Tu boleta de pago está lista!</h2>
+  <p>Hola {{ user_name }},</p>
+  <p>
+    Tu boleta correspondiente al <b>{{ issue_date }}</b> ha sido generada con éxito.
+    Puedes acceder a ella de dos maneras:
+  </p>
+  <h3>1. Escaneando este QR:</h3>
+  <img src="cid:qr_image" alt="QR Code" />
+  <h3>2. Haz clic en este botón:</h3>
+  <a href="{{ secure_url }}" 
+     style="background:#4361ee;color:white;padding:10px 20px;border-radius:5px;text-decoration:none;">
+    Ver mi boleta
+  </a>
+</body>
+</html>

@@ -16,6 +16,9 @@ from xhtml2pdf import pisa
 from io import BytesIO
 from django.utils import timezone
 from django.shortcuts import get_object_or_404
+from apps.notifications.services.email_service import send_payslip_email
+from apps.notifications.services.qr_service import generate_qr_code
+
 
 MONTHS_ES = [
     "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
@@ -583,6 +586,16 @@ class PayslipUploadViewSet(viewsets.ViewSet):
         payslip.pdf_file.save(pdf_filename, ContentFile(pdf_buffer.getvalue()))
         payslip.view_status = 'generated'
         payslip.save()
+
+        pdf_url = request.build_absolute_uri(payslip.pdf_file.url)
+        qr_bytes = generate_qr_code(pdf_url)
+
+        send_payslip_email(
+            user=user,
+            secure_url=pdf_url,
+            qr_bytes=qr_bytes,
+            issue_date=payslip.issue_date
+        )
 
         AuditLog.objects.create(
             profile=getattr(request.user, 'profile', None),
