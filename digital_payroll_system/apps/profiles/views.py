@@ -493,3 +493,33 @@ class ProfileViewSet(viewsets.ViewSet):
             ),
             status=status.HTTP_200_OK
         )
+    
+    @action(detail=False, methods=['post'], url_path='change-password')
+    def change_password(self, request):
+        serializer = ChangePasswordSerializer(
+            data=request.data,
+            context={"request": request}
+        )
+
+        if not serializer.is_valid():
+            return Response(
+                APIResponse.error(
+                    message="Error al cambiar la contraseña.",
+                    code=status.HTTP_400_BAD_REQUEST,
+                    errors=serializer.errors
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        user = request.user
+        new_password = serializer.validated_data["new_password"]
+
+        user.set_password(new_password)
+        user.save()
+
+        return Response(
+            APIResponse.success(
+                message="La contraseña se actualizó correctamente."
+            ),
+            status=status.HTTP_200_OK
+        )
