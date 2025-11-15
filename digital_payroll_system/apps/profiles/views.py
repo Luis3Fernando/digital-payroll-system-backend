@@ -13,6 +13,7 @@ from .serializers import *
 from .models import *
 from apps.audit_logs.models import AuditLog
 from common.response_handler import APIResponse
+from apps.audit_logs.utils.audit import create_audit_log
 from apps.notifications.services.email_service import (
     send_email_updated_notification,
     send_password_changed_notification
@@ -466,9 +467,9 @@ class ProfileViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['patch'], url_path='update-email')
     def update_email(self, request):
         user = request.user
-        email = request.data.get("email")
+        new_email = request.data.get("email")
 
-        if not email:
+        if not new_email:
             return Response(
                 APIResponse.error(
                     message="Debe proporcionar un correo electrónico.",
@@ -476,9 +477,11 @@ class ProfileViewSet(viewsets.ViewSet):
                 ),
                 status=status.HTTP_400_BAD_REQUEST
             )
+            
+        new_email = new_email.strip().lower()
 
         try:
-            validate_email(email)
+            validate_email(new_email)
         except ValidationError:
             return Response(
                 APIResponse.error(
@@ -488,7 +491,16 @@ class ProfileViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        if User.objects.exclude(id=user.id).filter(email=email).exists():
+        if user.email == new_email:
+            return Response(
+                APIResponse.error(
+                    message="El correo electrónico ingresado es igual al actual.",
+                    code=status.HTTP_400_BAD_REQUEST
+                ),
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        if User.objects.exclude(id=user.id).filter(email=new_email).exists():
             return Response(
                 APIResponse.error(
                     message="El correo electrónico ya está siendo usado por otro usuario.",
@@ -497,18 +509,31 @@ class ProfileViewSet(viewsets.ViewSet):
                 status=status.HTTP_409_CONFLICT
             )
 
-        user.email = email
+        old_email = user.email 
+
+        user.email = new_email
         user.save(update_fields=["email"])
 
-        send_email_updated_notification(user, email)
+        create_audit_log(
+            user=user,
+            action="UPDATE_EMAIL",
+            description="El usuario actualizó su dirección de correo.",
+            extra_data={
+                "old_email": old_email,
+                "new_email": new_email
+            }
+        )
+
+        send_email_updated_notification(user, new_email)
 
         return Response(
             APIResponse.success(
-                data={"email": email},
+                data={"email": new_email},
                 message="Correo electrónico actualizado correctamente."
             ),
             status=status.HTTP_200_OK
         )
+
     
     @action(detail=False, methods=['post'], url_path='change-password')
     def change_password(self, request):
@@ -530,8 +555,23 @@ class ProfileViewSet(viewsets.ViewSet):
         user = request.user
         new_password = serializer.validated_data["new_password"]
 
+        audit_extra = {
+            "user_id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "ip": request.META.get("REMOTE_ADDR"),
+            "agent": request.headers.get("User-Agent")
+        }
+
         user.set_password(new_password)
         user.save()
+
+        create_audit_log(
+            user=user,
+            action="CHANGE_PASSWORD",
+            description="El usuario cambió su contraseña.",
+            extra_data=audit_extra
+        )
 
         send_password_changed_notification(user)
 

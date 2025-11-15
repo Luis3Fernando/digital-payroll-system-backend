@@ -13,6 +13,8 @@ from .models import AuditLog
 from django.db.models.functions import Concat
 from django.utils.dateparse import parse_datetime
 from django.core.paginator import Paginator
+from datetime import datetime
+from django.db.models import F, ExpressionWrapper, DurationField
 
 class AuditDashboardViewSet(viewsets.ViewSet):
     permission_classes = [IsAuthenticated] 
@@ -55,8 +57,6 @@ class AuditDashboardViewSet(viewsets.ViewSet):
 
         view_rate = (total_seen / max(total_generated + total_unseen, 1)) * 100
 
-        from django.db.models import F, ExpressionWrapper, DurationField
-
         avg_open_time = payslips_seen.annotate(
             time_to_open=ExpressionWrapper(
                 F('updated_at') - F('created_at'),
@@ -80,12 +80,23 @@ class AuditDashboardViewSet(viewsets.ViewSet):
             .order_by('-total')[:5]
         )
 
-        hourly_activity = (
-            AuditLog.objects.annotate(hour=ExtractHour('created_at'))
+        raw_activity = (
+            AuditLog.objects
+            .filter(created_at__date=today)
+            .annotate(hour=ExtractHour('created_at'))
             .values('hour')
             .annotate(total=Count('id'))
-            .order_by('hour')
         )
+
+        activity_dict = {item['hour']: item['total'] for item in raw_activity}
+        current_hour = datetime.now().hour
+        hourly_activity = [
+            {
+                "hour": hour,
+                "total": activity_dict.get(hour, 0)
+            }
+            for hour in range(0, current_hour + 1)
+        ]
 
         data = {
             "users": {

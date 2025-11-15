@@ -5,6 +5,7 @@ from common.response_handler import APIResponse
 
 from django.utils import timezone
 from django.contrib.auth import get_user_model
+from apps.audit_logs.utils.audit import create_audit_log
 
 User = get_user_model()
 
@@ -18,9 +19,22 @@ class AuthViewSet(viewsets.ViewSet):
 
             try:
                 profile = Profile.objects.get(dni=dni)
+                create_audit_log(
+                    profile=profile,
+                    action="LOGIN_EXITOSO",
+                    description=f"El usuario {profile.user.username} inició sesión."
+                )
+
                 profile.last_login = timezone.now()
                 profile.save(update_fields=["last_login"])
+
             except Profile.DoesNotExist:
+                create_audit_log(
+                    profile=None,
+                    action="LOGIN_FALLIDO",
+                    description=f"Intento fallido de login con DNI {dni}."
+                )
+
                 return Response(
                     APIResponse.error(
                         message="No se encontró el perfil del usuario.",
@@ -36,6 +50,13 @@ class AuthViewSet(viewsets.ViewSet):
                 ),
                 status=status.HTTP_200_OK
             )
+
+        dni = request.data.get("dni", "desconocido")
+        create_audit_log(
+            profile=None,
+            action="LOGIN_FALLIDO",
+            description=f"Intento fallido de login con DNI {dni}."
+        )
 
         return Response(
             APIResponse.error(
@@ -53,7 +74,15 @@ class AuthViewSet(viewsets.ViewSet):
 
         try:
             token = RefreshToken(refresh_token)
+            profile = Profile.objects.get(user_id=token['user_id'])
+            create_audit_log(
+                profile=profile,
+                action="LOGOUT",
+                description=f"El usuario {profile.user.username} cerró sesión."
+            )
+
             token.blacklist()
+
             return Response(
                 APIResponse.success(
                     message="Cierre de sesión exitoso."
@@ -76,10 +105,17 @@ class AuthViewSet(viewsets.ViewSet):
 
         try:
             old_refresh = RefreshToken(old_refresh_token)
-            old_refresh.blacklist()
-
             user_id = old_refresh['user_id']
             user = User.objects.get(id=user_id)
+            profile = Profile.objects.get(user=user)
+
+            create_audit_log(
+                profile=profile,
+                action="TOKEN_REFRESH",
+                description=f"El usuario {profile.user.username} renovó su token."
+            )
+
+            old_refresh.blacklist()
 
             new_refresh = RefreshToken.for_user(user)
             access_token = str(new_refresh.access_token)
@@ -100,3 +136,4 @@ class AuthViewSet(viewsets.ViewSet):
                 ),
                 status=status.HTTP_401_UNAUTHORIZED
             )
+
