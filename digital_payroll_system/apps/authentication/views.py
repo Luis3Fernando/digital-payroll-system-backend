@@ -2,7 +2,8 @@ from rest_framework import status, viewsets
 from rest_framework.response import Response
 from .serializers import *
 from common.response_handler import APIResponse
-
+from rest_framework.permissions import AllowAny
+from rest_framework.decorators import action, authentication_classes, permission_classes
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from apps.audit_logs.utils.audit import create_audit_log
@@ -98,14 +99,22 @@ class AuthViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
+    @action(
+        detail=False,
+        methods=['post'],
+        url_path='refresh'
+    )
+    @authentication_classes([])     
+    @permission_classes([AllowAny]) 
     def refresh(self, request):
         serializer = RefreshTokenSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        old_refresh_token = serializer.validated_data['refresh']
+        old_refresh_token = serializer.validated_data["refresh"]
 
         try:
             old_refresh = RefreshToken(old_refresh_token)
-            user_id = old_refresh['user_id']
+
+            user_id = old_refresh["user_id"]
             user = User.objects.get(id=user_id)
             profile = Profile.objects.get(user=user)
 
@@ -122,7 +131,7 @@ class AuthViewSet(viewsets.ViewSet):
 
             return Response(
                 APIResponse.success(
-                    data={'access': access_token, 'refresh': str(new_refresh)},
+                    data={"access": access_token, "refresh": str(new_refresh)},
                     message="Token refreshed successfully."
                 ),
                 status=status.HTTP_200_OK
@@ -136,4 +145,3 @@ class AuthViewSet(viewsets.ViewSet):
                 ),
                 status=status.HTTP_401_UNAUTHORIZED
             )
-
