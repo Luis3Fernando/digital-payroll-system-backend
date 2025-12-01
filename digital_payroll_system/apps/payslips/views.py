@@ -1,3 +1,4 @@
+import time
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.response import Response
@@ -79,6 +80,8 @@ class PayslipUploadViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'], url_path='upload-payslips')
     def upload_payslips(self, request):
+        start_time = time.time() 
+
         if not request.user.profile.role == 'admin':
             return Response(
                 APIResponse.error(
@@ -118,7 +121,7 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 ),
                 status=status.HTTP_400_BAD_REQUEST
             )
-
+            
         headers = [str(cell.value).strip() if cell.value else '' for cell in ws[1]]
         normalized_headers = [normalize(h) for h in headers]
 
@@ -138,34 +141,45 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        messages = []
+        created_count = 0
+        skipped_count = 0
+        error_messages = [] 
 
         for row_idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
             row_data = {column_map[idx]: cell.value for idx, cell in enumerate(row) if idx in column_map}
 
             dni = str(row_data.get('dni')).strip() if row_data.get('dni') else None
+        
             if not dni:
-                messages.append(f"Fila {row_idx}: DNI no encontrado. Se saltó la fila.")
+                skipped_count += 1
+                error_messages.append(f"Fila {row_idx}: DNI no encontrado. Se saltó la fila.")
                 continue
 
             try:
                 profile = Profile.objects.get(dni=dni)
             except Profile.DoesNotExist:
-                messages.append(f"Fila {row_idx}: Usuario con DNI {dni} no existe. Se saltó la fila.")
+                skipped_count += 1
+                error_messages.append(f"Fila {row_idx}: Usuario con DNI {dni} no existe. Se saltó la fila.")
+                continue
+            except Exception as e:
+                skipped_count += 1
+                error_messages.append(f"Fila {row_idx}: Error al buscar Profile con DNI {dni}: {str(e)}. Se saltó la fila.")
                 continue
 
             period_text = str(row_data.get('issue_date'))
             issue_date = parse_period(period_text)
             if not issue_date:
-                messages.append(f"Fila {row_idx}: Periodo '{period_text}' inválido. Se saltó la fila.")
+                skipped_count += 1
+                error_messages.append(f"Fila {row_idx}: Periodo '{period_text}' inválido. Se saltó la fila.")
                 continue
-
+            
             try:
                 amount = Decimal(row_data.get('amount'))
             except Exception:
-                messages.append(f"Fila {row_idx}: Monto inválido '{row_data.get('amount')}'. Se saltó la fila.")
+                skipped_count += 1
+                error_messages.append(f"Fila {row_idx}: Monto inválido '{row_data.get('amount')}'. Se saltó la fila.")
                 continue
-
+            
             concept = str(row_data.get('concept')).upper()
 
             if Payslip.objects.filter(
@@ -174,29 +188,48 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 issue_date__year=issue_date.year,
                 issue_date__month=issue_date.month
             ).exists():
-                messages.append(
+                skipped_count += 1
+                error_messages.append(
                     f"Fila {row_idx}: Ya existe una boleta con el concepto '{concept}' "
                     f"para el periodo {issue_date.strftime('%Y-%m')}. Se saltó la fila."
                 )
                 continue
+            
+            try:
+                Payslip.objects.create(
+                    profile=profile,
+                    concept=concept,
+                    amount=amount,
+                    data_source=str(row_data.get('data_source')).upper(),
+                    payroll_type=str(row_data.get('payroll_type')).upper(),
+                    data_type=str(row_data.get('data_type')).upper(),
+                    position_order=int(row_data.get('position_order')),
+                    issue_date=issue_date,
+                    pdf_file='',
+                    view_status='unseen'
+                )
+                created_count += 1
+            except Exception as e:
+                skipped_count += 1
+                error_messages.append(f"Fila {row_idx}: Error al crear la boleta para DNI {dni}: {str(e)}. Se saltó la fila.")
 
-            Payslip.objects.create(
-                profile=profile,
-                concept=concept,
-                amount=amount,
-                data_source=str(row_data.get('data_source')).upper(),
-                payroll_type=str(row_data.get('payroll_type')).upper(),
-                data_type=str(row_data.get('data_type')).upper(),
-                position_order=int(row_data.get('position_order')),
-                issue_date=issue_date,
-                pdf_file='',
-                view_status='unseen'
-            )
 
-            messages.append(f"Fila {row_idx}: Boleta para DNI {dni} creada.")
+        final_messages = []
+        
+        if created_count > 0:
+            final_messages.append(f"{created_count} boletas creadas exitosamente.")
+        
+        if skipped_count > 0:
+            final_messages.append(f"{skipped_count} filas fueron saltadas o con errores. ({len(error_messages)} errores detallados).")
 
+        final_messages.extend(error_messages)
 
-        description_text = "\n".join(messages)
+        if not final_messages:
+            main_message = "Procesamiento de Boletas finalizado sin cambios visibles o errores."
+        else:
+            main_message = "Procesamiento de Boletas finalizado."
+
+        description_text = "\n".join(final_messages)
         AuditLog.objects.create(
             profile=request.user.profile,
             action="CARGA DE BOLETAS",
@@ -205,8 +238,15 @@ class PayslipUploadViewSet(viewsets.ViewSet):
 
         return Response(
             APIResponse.success(
-                message="Procesamiento finalizado.",
-                data={'messages': messages}
+                message=main_message, 
+                data={
+                    'messages': final_messages, 
+                    'created_count': created_count,
+                    'skipped_count': skipped_count
+                },
+                meta={
+                    "durationMs": int((time.time() - start_time) * 1000)
+                }
             ),
             status=status.HTTP_200_OK
         )
@@ -293,12 +333,12 @@ class PayslipUploadViewSet(viewsets.ViewSet):
         AuditLog.objects.create(
             profile=request.user.profile,
             action="ELIMINAR BOLETA",
-            description=f"Se eliminó la boleta con ID {payslip_id} del usuario {payslip.profile.dni}."
+            description=f"Se eliminó la boleta del usuario {payslip.profile.dni}."
         )
 
         return Response(
             APIResponse.success(
-                message=f"Boleta con ID {payslip_id} eliminada correctamente."
+                message=f"Boleta eliminada correctamente."
             ),
             status=status.HTTP_200_OK
         )
