@@ -1,3 +1,4 @@
+import time
 from rest_framework import viewsets, status
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -80,6 +81,7 @@ class ProfileViewSet(viewsets.ViewSet):
 
     @action(detail=False, methods=['post'], url_path='upload-users')
     def upload_users(self, request):
+        start_time = time.time() 
         if not request.user.profile.role == 'admin':
             return Response(
                 APIResponse.error(
@@ -122,14 +124,13 @@ class ProfileViewSet(viewsets.ViewSet):
 
         headers = [str(cell.value).strip() if cell.value else '' for cell in ws[1]]
         normalized_headers = [normalize(h) for h in headers]
-
         column_map = {}
 
         for idx, nh in enumerate(normalized_headers):
             for field, variants in REQUIRED_COLUMNS.items():
                 if nh in [normalize(v) for v in variants]:
                     column_map[idx] = field
-
+        
         for idx, nh in enumerate(normalized_headers):
             for field, variants in OPTIONAL_COLUMNS.items():
                 if nh in [normalize(v) for v in variants]:
@@ -145,7 +146,12 @@ class ProfileViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        messages = []
+        results = {
+            'created_count': 0,
+            'updated_count': 0,
+            'skipped_rows': 0
+        }
+        error_messages = [] 
 
         for row_idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
             row_data = {column_map[idx]: cell.value for idx, cell in enumerate(row) if idx in column_map}
@@ -155,59 +161,75 @@ class ProfileViewSet(viewsets.ViewSet):
             first_name = to_upper(row_data.get('first_name'))
 
             if not dni or not last_name or not first_name:
-                messages.append(f"Fila {row_idx}: DNI, last_name y first_name son obligatorios. Se saltó la fila.")
+                results['skipped_rows'] += 1
+                error_messages.append(f"Fila {row_idx}: DNI, Apellido o Nombre faltantes. (DNI: {dni or 'N/A'})")
                 continue
 
             email = row_data.get('email')
-            user_data = {
-                'first_name': first_name,
-                'last_name': last_name
-            }
+            user_data = {'first_name': first_name, 'last_name': last_name}
             if email:
                 user_data['email'] = email
 
-            user, created = User.objects.update_or_create(
-                username=dni,
-                defaults=user_data
-            )
-
-            if created:
-                user.set_password(dni)
-                user.save()
-                messages.append(f"Fila {row_idx}: Usuario con DNI {dni} creado.")
-            else:
-                messages.append(f"Fila {row_idx}: Usuario con DNI {dni} actualizado.")
+            try:
+                user, created = User.objects.update_or_create(
+                    username=dni,
+                    defaults=user_data
+                )
+                if created:
+                    user.set_password(dni)
+                    user.save()
+                    results['created_count'] += 1
+                else:
+                    results['updated_count'] += 1
+            except Exception as e:
+                results['skipped_rows'] += 1
+                error_messages.append(f"Fila {row_idx}: Error al crear/actualizar usuario con DNI {dni}: {str(e)}")
+                continue
 
             resigned_value = row_data.get('resigned')
-            if resigned_value in [1, "1", True, "TRUE", "True"]:
-                resigned_bool = True
-            else:
-                resigned_bool = False
-
+            resigned_bool = resigned_value in [1, "1", True, "TRUE", "True"]
             profile_data = {
-                'user': user,
-                'dni': dni,
+                'user': user, 
+                'dni': dni, 
                 'role': 'user',
                 'position': to_upper(row_data.get('position')),
-                'description': to_upper(row_data.get('description')),
+                'description': to_upper(row_data.get('description')), 
                 'descriptionSP': to_upper(row_data.get('descriptionSP')),
                 'start_date': parse_date(row_data.get('start_date')),
-                'end_date': parse_date(row_data.get('end_date')),
+                'end_date': parse_date(row_data.get('end_date')), 
                 'resigned_date': parse_date(row_data.get('resigned_date')),
-                'resigned': resigned_bool,
-                'regimen': to_upper(row_data.get('regimen')),
+                'resigned': resigned_bool, 
+                'regimen': to_upper(row_data.get('regimen')), 
                 'category': to_upper(row_data.get('category')),
                 'condition': to_upper(row_data.get('condition')),
                 'identification_code': to_upper(row_data.get('identification_code')),
                 'establishment': to_upper(row_data.get('establishment')),
             }
+            try:
+                Profile.objects.update_or_create(user=user, defaults=profile_data)
+            except Exception as e:
+                error_messages.append(f"Fila {row_idx}: Error al actualizar perfil con DNI {dni}: {str(e)}")
 
-            Profile.objects.update_or_create(
-                user=user, 
-                defaults=profile_data
-            )
 
-        description_text = "\n".join(messages)
+        final_messages = []
+        
+        if results['created_count'] > 0:
+            final_messages.append(f"{results['created_count']} usuarios nuevos creados.")
+        
+        if results['updated_count'] > 0:
+            final_messages.append(f"{results['updated_count']} usuarios actualizados.")
+
+        if results['skipped_rows'] > 0:
+            final_messages.append(f"{results['skipped_rows']} filas fueron saltadas o con errores. ({len(error_messages)} errores detallados).")
+
+        final_messages.extend(error_messages)
+
+        if not final_messages:
+            final_messages.append("Procesamiento finalizado sin cambios visibles o errores.")
+        
+        main_message = "Procesamiento de carga de usuarios finalizado."
+
+        description_text = "\n".join(final_messages)
         AuditLog.objects.create(
             profile=request.user.profile,
             action="CARGA DE USUARIOS",
@@ -216,14 +238,24 @@ class ProfileViewSet(viewsets.ViewSet):
 
         return Response(
             APIResponse.success(
-                message="Procesamiento finalizado.",
-                data={'messages': messages}
+                message=main_message, 
+                data={
+                    'messages': final_messages, 
+                    'created_count': results['created_count'],
+                    'updated_count': results['updated_count'],
+                    'skipped_rows': results['skipped_rows']
+                },
+                meta={  
+                    "durationMs": int((time.time() - start_time) * 1000)
+                }
             ),
             status=status.HTTP_200_OK
         )
     
     @action(detail=False, methods=['post'], url_path='upload-work-details')
     def upload_work_details(self, request):
+        start_time = time.time() 
+
         if not request.user.profile.role == 'admin':
             return Response(
                 APIResponse.error(
@@ -283,13 +315,11 @@ class ProfileViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
 
-        messages = []
-
         created_count = 0
         updated_count = 0
         skipped_count = 0
-        skipped_detail = [] 
-
+        detailed_messages = [] 
+        
         for row_idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
             row_data = {column_map[idx]: cell.value for idx, cell in enumerate(row) if idx in column_map}
 
@@ -297,65 +327,96 @@ class ProfileViewSet(viewsets.ViewSet):
 
             if not dni:
                 skipped_count += 1
-                skipped_detail.append(f"Fila {row_idx}: DNI es obligatorio.")
+                detailed_messages.append(f"Fila {row_idx}: DNI es obligatorio.")
                 continue
 
             try:
                 profile = Profile.objects.get(dni=dni)
             except Profile.DoesNotExist:
                 skipped_count += 1
-                skipped_detail.append(f"Fila {row_idx}: No existe Profile con DNI {dni}.")
+                detailed_messages.append(f"Fila {row_idx}: No existe Profile con DNI {dni}.")
+                continue
+            except Exception as e:
+                skipped_count += 1
+                detailed_messages.append(f"Fila {row_idx}: Error al buscar Profile con DNI {dni}: {str(e)}")
+                continue
+            
+            try:
+                work_data = {
+                    'worked_days': int(row_data.get('worked_days') or 0),
+                    'non_worked_days': int(row_data.get('non_worked_days') or 0),
+                    'worked_hours': int(row_data.get('worked_hours') or 0),
+                    'discount_academic_hours': int(row_data.get('discount_academic_hours') or 0),
+                    'discount_lateness': int(row_data.get('discount_lateness') or 0),
+                    'personal_leave_hours': int(row_data.get('personal_leave_hours') or 0),
+                    'sunday_discount': int(row_data.get('sunday_discount') or 0),
+                    'vacation_days': int(row_data.get('vacation_days') or 0),
+                    'vacation_hours': int(row_data.get('vacation_hours') or 0),
+                }
+            except ValueError as e:
+                skipped_count += 1
+                detailed_messages.append(f"Fila {row_idx}: Error de formato numérico en datos laborales: {str(e)}")
+                continue
+            except Exception as e:
+                skipped_count += 1
+                detailed_messages.append(f"Fila {row_idx}: Error al preparar datos laborales: {str(e)}")
                 continue
 
-            work_data = {
-                'worked_days': int(row_data.get('worked_days') or 0),
-                'non_worked_days': int(row_data.get('non_worked_days') or 0),
-                'worked_hours': int(row_data.get('worked_hours') or 0),
-                'discount_academic_hours': int(row_data.get('discount_academic_hours') or 0),
-                'discount_lateness': int(row_data.get('discount_lateness') or 0),
-                'personal_leave_hours': int(row_data.get('personal_leave_hours') or 0),
-                'sunday_discount': int(row_data.get('sunday_discount') or 0),
-                'vacation_days': int(row_data.get('vacation_days') or 0),
-                'vacation_hours': int(row_data.get('vacation_hours') or 0),
-            }
-
-            work_details, created = ProfileWorkDetails.objects.update_or_create(
-                profile=profile,
-                defaults=work_data
-            )
+            try:
+                work_details, created = ProfileWorkDetails.objects.update_or_create(
+                    profile=profile,
+                    defaults=work_data
+                )
+            except Exception as e:
+                skipped_count += 1
+                detailed_messages.append(f"Fila {row_idx}: Error al crear/actualizar WorkDetails para DNI {dni}: {str(e)}")
+                continue
 
             if created:
                 created_count += 1
             else:
                 updated_count += 1
 
-        summary = (
-            f"Usuarios creados: {created_count}\n"
-            f"Usuarios actualizados: {updated_count}\n"
-            f"Filas saltadas: {skipped_count}"
-        )
+        final_messages = []
         
+        if created_count > 0:
+            final_messages.append(f"{created_count} detalles de usuarios fueron creados.")
+        
+        if updated_count > 0:
+            final_messages.append(f"{updated_count} detalles de usuarios fueron actualizados.")
+
+        if skipped_count > 0:
+            final_messages.append(f"{skipped_count} filas fueron saltadas o con errores. ({len(detailed_messages)} errores detallados).")
+
+        final_messages.extend(detailed_messages)
+
+        if not final_messages:
+            main_message = "Procesamiento de Work Details finalizado sin cambios visibles o errores."
+        else:
+            main_message = "Procesamiento de Work Details finalizado."
+
+        description_text = "\n".join(final_messages)
         AuditLog.objects.create(
             profile=request.user.profile,
             action="CARGA DE WORK DETAILS",
-            description=summary + (
-                "\n\nDetalles de errores:\n" + "\n".join(skipped_detail)
-                if skipped_detail else ""
-            )
+            description=description_text
         )
 
         return Response(
             APIResponse.success(
-                message="Procesamiento de WorkDetails finalizado.",
+                message=main_message, 
                 data={
-                    'created': created_count,
-                    'updated': updated_count,
-                    'skipped': skipped_count
+                    'created_count': created_count,
+                    'updated_count': updated_count,
+                    'skipped_count': skipped_count,
+                    'messages': final_messages, 
+                },
+                meta={
+                    "durationMs": int((time.time() - start_time) * 1000)
                 }
             ),
             status=status.HTTP_200_OK
         )
-
     @action(detail=False, methods=['get'], url_path='list-users')
     def list_users(self, request):
         if not request.user.profile.role == 'admin':
