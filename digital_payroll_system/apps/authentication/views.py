@@ -116,13 +116,6 @@ class AuthViewSet(viewsets.ViewSet):
 
             user_id = old_refresh["user_id"]
             user = User.objects.get(id=user_id)
-            profile = Profile.objects.get(user=user)
-
-            create_audit_log(
-                profile=profile,
-                action="TOKEN_REFRESH",
-                description=f"El usuario {profile.user.username} renovó su token."
-            )
 
             old_refresh.blacklist()
 

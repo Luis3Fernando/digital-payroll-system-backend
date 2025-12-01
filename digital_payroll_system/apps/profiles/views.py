@@ -285,19 +285,26 @@ class ProfileViewSet(viewsets.ViewSet):
 
         messages = []
 
+        created_count = 0
+        updated_count = 0
+        skipped_count = 0
+        skipped_detail = [] 
+
         for row_idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
             row_data = {column_map[idx]: cell.value for idx, cell in enumerate(row) if idx in column_map}
 
             dni = to_upper(row_data.get('dni'))
 
             if not dni:
-                messages.append(f"Fila {row_idx}: DNI es obligatorio. Se saltó la fila.")
+                skipped_count += 1
+                skipped_detail.append(f"Fila {row_idx}: DNI es obligatorio.")
                 continue
 
             try:
                 profile = Profile.objects.get(dni=dni)
             except Profile.DoesNotExist:
-                messages.append(f"Fila {row_idx}: No se encontró Profile con DNI {dni}. Se saltó la fila.")
+                skipped_count += 1
+                skipped_detail.append(f"Fila {row_idx}: No existe Profile con DNI {dni}.")
                 continue
 
             work_data = {
@@ -318,21 +325,33 @@ class ProfileViewSet(viewsets.ViewSet):
             )
 
             if created:
-                messages.append(f"Fila {row_idx}: WorkDetails para DNI {dni} creado.")
+                created_count += 1
             else:
-                messages.append(f"Fila {row_idx}: WorkDetails para DNI {dni} actualizado.")
+                updated_count += 1
 
-        description_text = "\n".join(messages)
+        summary = (
+            f"Usuarios creados: {created_count}\n"
+            f"Usuarios actualizados: {updated_count}\n"
+            f"Filas saltadas: {skipped_count}"
+        )
+        
         AuditLog.objects.create(
             profile=request.user.profile,
             action="CARGA DE WORK DETAILS",
-            description=description_text
+            description=summary + (
+                "\n\nDetalles de errores:\n" + "\n".join(skipped_detail)
+                if skipped_detail else ""
+            )
         )
 
         return Response(
             APIResponse.success(
                 message="Procesamiento de WorkDetails finalizado.",
-                data={'messages': messages}
+                data={
+                    'created': created_count,
+                    'updated': updated_count,
+                    'skipped': skipped_count
+                }
             ),
             status=status.HTTP_200_OK
         )
