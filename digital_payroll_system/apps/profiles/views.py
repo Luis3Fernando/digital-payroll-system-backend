@@ -648,7 +648,7 @@ class ProfileViewSet(viewsets.ViewSet):
 
         create_audit_log(
             user=user,
-            action="CHANGE_PASSWORD",
+            action="CAMBIO DE CONTRASEÑA",
             description="El usuario cambió su contraseña.",
             extra_data=audit_extra
         )
