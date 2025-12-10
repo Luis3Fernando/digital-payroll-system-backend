@@ -487,7 +487,6 @@ class ProfileViewSet(viewsets.ViewSet):
             status=status.HTTP_200_OK
         )
 
-
     @action(detail=False, methods=['get'], url_path='me')
     def me(self, request):
         profile = getattr(request.user, 'profile', None)
@@ -589,8 +588,6 @@ class ProfileViewSet(viewsets.ViewSet):
                 status=status.HTTP_409_CONFLICT
             )
 
-        old_email = user.email 
-
         user.email = new_email
         user.save(update_fields=["email"])
 
@@ -599,8 +596,7 @@ class ProfileViewSet(viewsets.ViewSet):
             action="UPDATE_EMAIL",
             description="El usuario actualizó su dirección de correo.",
             extra_data={
-                "old_email": old_email,
-                "new_email": new_email
+                f"Cambio de email a: {new_email}"
             }
         )
 
