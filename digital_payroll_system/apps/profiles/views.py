@@ -417,6 +417,7 @@ class ProfileViewSet(viewsets.ViewSet):
             ),
             status=status.HTTP_200_OK
         )
+    
     @action(detail=False, methods=['get'], url_path='list-users')
     def list_users(self, request):
         if not request.user.profile.role == 'admin':
@@ -592,12 +593,9 @@ class ProfileViewSet(viewsets.ViewSet):
         user.save(update_fields=["email"])
 
         create_audit_log(
-            user=user,
+            profile=request.user.profile,
             action="UPDATE_EMAIL",
             description="El usuario actualizó su dirección de correo.",
-            extra_data={
-                f"Cambio de email a: {new_email}"
-            }
         )
 
         send_email_updated_notification(user, new_email)
@@ -610,7 +608,6 @@ class ProfileViewSet(viewsets.ViewSet):
             status=status.HTTP_200_OK
         )
 
-    
     @action(detail=False, methods=['post'], url_path='change-password')
     def change_password(self, request):
         serializer = ChangePasswordSerializer(
@@ -643,10 +640,9 @@ class ProfileViewSet(viewsets.ViewSet):
         user.save()
 
         create_audit_log(
-            user=user,
+            profile=request.user.profile,
             action="CAMBIO DE CONTRASEÑA",
-            description="El usuario cambió su contraseña.",
-            extra_data=audit_extra
+            description="El usuario cambió su contraseña."
         )
 
         send_password_changed_notification(user)
