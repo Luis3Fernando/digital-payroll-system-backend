@@ -3,12 +3,24 @@ from django.template.loader import render_to_string
 from django.conf import settings
 from email.mime.image import MIMEImage
 
+MONTHS_ES = [
+    "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
+    "JULIO", "AGOSTO", "SEPTIEMBRE", "OCTUBRE", "NOVIEMBRE", "DICIEMBRE"
+]
+
 def send_payslip_email(user, secure_url, qr_bytes, issue_date):
     subject = "Tu boleta de pago está lista"
+
+    try:
+        month_name = MONTHS_ES[issue_date.month - 1]
+        issue_date_es = f"{month_name} {issue_date.year}"
+    except Exception:
+        issue_date_es = str(issue_date)
+
     html = render_to_string("emails/payslip_generated.html", {
         "user_name": user.get_full_name(),
         "secure_url": secure_url,
-        "issue_date": issue_date,
+        "issue_date": issue_date_es,
     })
 
     email = EmailMultiAlternatives(
