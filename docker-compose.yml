@@ -1,0 +1,27 @@
+version: '3.8'
+
+services:
+  boletas-app:
+    build: .
+    container_name: boletas_django_app
+    restart: always
+    env_file:
+      - .env
+    ports:
+      - "8003:8000" 
+    volumes:
+      - boletas_media:/app/media
+      - boletas_static:/app/static_root
+    networks:
+      - siit_net
+      - proxy_network
+
+networks:
+  siit_net:
+    external: true   
+  proxy_network:
+    external: true  
+
+volumes:
+  boletas_media:
+  boletas_static:
