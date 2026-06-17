@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   boletas-app:
     build: .
@@ -8,7 +6,7 @@ services:
     env_file:
       - .env
     ports:
-      - "8003:8000" 
+      - "8003:8000"
     volumes:
       - boletas_media:/app/media
       - boletas_static:/app/static_root
@@ -18,9 +16,11 @@ services:
 
 networks:
   siit_net:
-    external: true   
+    external: true
+    name: siit-api_siit_net
   proxy_network:
-    external: true  
+    external: true
+    name: proxy_network
 
 volumes:
   boletas_media:
