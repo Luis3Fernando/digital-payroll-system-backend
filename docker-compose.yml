@@ -8,8 +8,8 @@ services:
     ports:
       - "8003:8000"
     volumes:
-      - boletas_media:/app/media
-      - boletas_static:/app/static_root
+      - boletas_media:/app/digital_payroll_system/media
+      - boletas_static:/app/digital_payroll_system/static_root
     networks:
       - siit_net
       - proxy_network
