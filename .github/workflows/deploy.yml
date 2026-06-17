@@ -16,12 +16,21 @@ jobs:
       - name: Deploy via SSH to AWS Lightsail
         uses: appleboy/ssh-action@master
         with:
-          host: ${{ secrets.SSH_HOST }}        
-          username: ${{ secrets.SSH_USER }}   
-          key: ${{ secrets.SSH_PRIVATE_KEY }} 
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd ~/proyectos/digital-payroll-system-backend
-            git pull origin main
-            sudo docker compose down
-            sudo docker compose up -d --build
-            echo "¡Despliegue de Boletas completado exitosamente!"
+            mkdir -p ~/proyectos
+            cd ~/proyectos
+
+            if [ ! -d "digital-payroll-system-backend" ]; then
+              git clone https://github.com/Luis3Fernando/digital-payroll-system-backend.git digital-payroll-system-backend
+              cd digital-payroll-system-backend
+            else
+              cd digital-payroll-system-backend
+              git fetch origin main
+              git reset --hard origin/main
+            fi
+
+            sudo docker compose up -d --build --remove-orphans
+            echo "¡Despliegue de Boletas completado con éxito!"
