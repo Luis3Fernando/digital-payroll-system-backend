@@ -19,8 +19,9 @@ from django.utils import timezone
 from django.shortcuts import get_object_or_404
 from apps.notifications.services.email_service import send_payslip_email
 from apps.notifications.services.qr_service import generate_qr_code
-from django.db.models import Q, F, Value, CharField
-from django.db.models.functions import Concat
+from django.db.models import Max, Q, Subquery, OuterRef, F, Value, CharField
+from django.db.models.functions import Concat, ExtractMonth, ExtractYear
+from django.db import transaction
 
 MONTHS_ES = [
     "ENERO", "FEBRERO", "MARZO", "ABRIL", "MAYO", "JUNIO",
@@ -145,77 +146,83 @@ class PayslipUploadViewSet(viewsets.ViewSet):
         skipped_count = 0
         error_messages = [] 
 
-        for row_idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
-            row_data = {column_map[idx]: cell.value for idx, cell in enumerate(row) if idx in column_map}
+        profiles_map = {p.dni: p for p in Profile.objects.all()}
 
-            dni = str(row_data.get('dni')).strip() if row_data.get('dni') else None
-        
-            if not dni:
-                skipped_count += 1
-                error_messages.append(f"Fila {row_idx}: DNI no encontrado. Se saltó la fila.")
-                continue
+        try:
+            with transaction.atomic():
+                for row_idx, row in enumerate(ws.iter_rows(min_row=2), start=2):
+                    row_data = {column_map[idx]: cell.value for idx, cell in enumerate(row) if idx in column_map}
 
-            try:
-                profile = Profile.objects.get(dni=dni)
-            except Profile.DoesNotExist:
-                skipped_count += 1
-                error_messages.append(f"Fila {row_idx}: Usuario con DNI {dni} no existe. Se saltó la fila.")
-                continue
-            except Exception as e:
-                skipped_count += 1
-                error_messages.append(f"Fila {row_idx}: Error al buscar Profile con DNI {dni}: {str(e)}. Se saltó la fila.")
-                continue
+                    dni = str(row_data.get('dni')).strip() if row_data.get('dni') else None
+                
+                    if not dni:
+                        skipped_count += 1
+                        error_messages.append(f"Fila {row_idx}: DNI no encontrado. Se saltó la fila.")
+                        continue
 
-            period_text = str(row_data.get('issue_date'))
-            issue_date = parse_period(period_text)
-            if not issue_date:
-                skipped_count += 1
-                error_messages.append(f"Fila {row_idx}: Periodo '{period_text}' inválido. Se saltó la fila.")
-                continue
-            
-            try:
-                amount = Decimal(row_data.get('amount'))
-            except Exception:
-                skipped_count += 1
-                error_messages.append(f"Fila {row_idx}: Monto inválido '{row_data.get('amount')}'. Se saltó la fila.")
-                continue
-            
-            concept = str(row_data.get('concept')).upper()
+                    profile = profiles_map.get(dni)
+                    if not profile:
+                        skipped_count += 1
+                        error_messages.append(f"Fila {row_idx}: Usuario con DNI {dni} no existe. Se saltó la fila.")
+                        continue
 
-            if Payslip.objects.filter(
-                profile=profile,
-                concept=concept,
-                issue_date__year=issue_date.year,
-                issue_date__month=issue_date.month
-            ).exists():
-                skipped_count += 1
-                error_messages.append(
-                    f"Fila {row_idx}: Ya existe una boleta con el concepto '{concept}' "
-                    f"para el periodo {issue_date.strftime('%Y-%m')}. Se saltó la fila."
-                )
-                continue
-            
-            try:
-                Payslip.objects.create(
-                    profile=profile,
-                    concept=concept,
-                    amount=amount,
-                    data_source=str(row_data.get('data_source')).upper(),
-                    payroll_type=str(row_data.get('payroll_type')).upper(),
-                    data_type=str(row_data.get('data_type')).upper(),
-                    position_order=int(row_data.get('position_order')),
-                    issue_date=issue_date,
-                    pdf_file='',
-                    view_status='unseen'
-                )
-                created_count += 1
-            except Exception as e:
-                skipped_count += 1
-                error_messages.append(f"Fila {row_idx}: Error al crear la boleta para DNI {dni}: {str(e)}. Se saltó la fila.")
+                    period_text = str(row_data.get('issue_date'))
+                    issue_date = parse_period(period_text)
+                    if not issue_date:
+                        skipped_count += 1
+                        error_messages.append(f"Fila {row_idx}: Periodo '{period_text}' inválido. Se saltó la fila.")
+                        continue
+                    
+                    try:
+                        amount = Decimal(str(row_data.get('amount')))
+                    except Exception:
+                        skipped_count += 1
+                        error_messages.append(f"Fila {row_idx}: Monto inválido '{row_data.get('amount')}'. Se saltó la fila.")
+                        continue
+                    
+                    concept = str(row_data.get('concept')).upper()
 
+                    if Payslip.objects.filter(
+                        profile=profile,
+                        concept=concept,
+                        issue_date__year=issue_date.year,
+                        issue_date__month=issue_date.month
+                    ).exists():
+                        skipped_count += 1
+                        error_messages.append(
+                            f"Fila {row_idx}: Ya existe una boleta con el concepto '{concept}' "
+                            f"para el periodo {issue_date.strftime('%Y-%m')}. Se saltó la fila."
+                        )
+                        continue
+                    
+                    try:
+                        Payslip.objects.create(
+                            profile=profile,
+                            concept=concept,
+                            amount=amount,
+                            data_source=str(row_data.get('data_source')).upper(),
+                            payroll_type=str(row_data.get('payroll_type')).upper(),
+                            data_type=str(row_data.get('data_type')).upper(),
+                            position_order=int(row_data.get('position_order')),
+                            issue_date=issue_date,
+                            pdf_file='',
+                            view_status='unseen'
+                        )
+                        created_count += 1
+                    except Exception as e:
+                        skipped_count += 1
+                        error_messages.append(f"Fila {row_idx}: Error al crear la boleta para DNI {dni}: {str(e)}. Se saltó la fila.")
+
+        except Exception as e:
+            return Response(
+                APIResponse.error(
+                    message=f"Error crítico en la transacción de la base de datos: {str(e)}",
+                    code=status.HTTP_500_INTERNAL_SERVER_ERROR
+                ),
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
         final_messages = []
-        
         if created_count > 0:
             final_messages.append(f"{created_count} boletas creadas exitosamente.")
         
@@ -345,12 +352,13 @@ class PayslipUploadViewSet(viewsets.ViewSet):
     
     @action(detail=False, methods=['get'], url_path='list-payslips')
     def list_payslips(self, request):
+        """
+        Vista para el Administrador: Lista una única fila por usuario y periodo (mes/año),
+        mostrando los montos totales agregados de Ingresos, Descuentos y el Neto Líquido.
+        """
         if not request.user.profile.role == 'admin':
             return Response(
-                APIResponse.error(
-                    message="No tiene permisos para realizar esta acción.",
-                    code=status.HTTP_403_FORBIDDEN
-                ),
+                APIResponse.error(message="No tiene permisos para realizar esta acción.", code=status.HTTP_403_FORBIDDEN),
                 status=status.HTTP_403_FORBIDDEN
             )
 
@@ -366,17 +374,15 @@ class PayslipUploadViewSet(viewsets.ViewSet):
 
         dni = request.query_params.get('dni')
         name = request.query_params.get('name')
-        concept = request.query_params.get('concept')
         status_view = request.query_params.get('status')
         month = request.query_params.get('month')
         year = request.query_params.get('year')
-
-        queryset = Payslip.objects.select_related('profile', 'profile__user').order_by('-issue_date')
+        base_queryset = Payslip.objects.select_related('profile', 'profile__user')
 
         if dni:
-            queryset = queryset.filter(profile__dni__icontains=dni)
+            base_queryset = base_queryset.filter(profile__dni__icontains=dni)
 
-        queryset = queryset.annotate(
+        base_queryset = base_queryset.annotate(
             full_name_concat=Concat(
                 F('profile__user__first_name'),
                 Value(' '),
@@ -388,57 +394,64 @@ class PayslipUploadViewSet(viewsets.ViewSet):
         if name:
             tokens = [t.strip() for t in name.split() if t.strip()]
             for token in tokens: 
-                queryset = queryset.filter(full_name_concat__icontains=token)
-
-
-        if concept:
-            queryset = queryset.filter(concept__icontains=concept)
+                base_queryset = base_queryset.filter(full_name_concat__icontains=token)
 
         if status_view:
-            queryset = queryset.filter(view_status=status_view)
+            base_queryset = base_queryset.filter(view_status=status_view)
 
         if month:
-            try:
-                month = int(month)
-                queryset = queryset.filter(issue_date__month=month)
-            except:
-                pass
+            try: base_queryset = base_queryset.filter(issue_date__month=int(month))
+            except: pass
 
         if year:
-            try:
-                year = int(year)
-                queryset = queryset.filter(issue_date__year=year)
-            except:
-                pass
+            try: base_queryset = base_queryset.filter(issue_date__year=int(year))
+            except: pass
 
-        total = queryset.count()
+        grouped_qs = base_queryset.values('profile', 'issue_date').annotate(
+            total_ingresos=Max('amount', filter=Q(data_source='TOTALINGRESOS')),
+            total_descuentos=Max('amount', filter=Q(data_source='TOTALDSCTO')),
+            liquido_pagar=Max('amount', filter=Q(data_source='LIQUIDOPAGAR')),
+            reference_id=Max('id'),
+            has_pdf=Max('pdf_file', filter=Q(pdf_file__isnull=False, pdf_file__ne=''))
+        ).order_by('-issue_date')
+
+        total = grouped_qs.count()
         offset = (page - 1) * page_size
-        payslips = queryset[offset: offset + page_size]
+        paginated_groups = grouped_qs[offset: offset + page_size]
 
         results = []
+        for g in paginated_groups:
+            ref_payslip = Payslip.objects.select_related('profile', 'profile__user').filter(
+                profile_id=g['profile'], 
+                issue_date=g['issue_date']
+            ).first()
+            
+            if not ref_payslip:
+                continue
 
-        for p in payslips:
-            user = p.profile.user
+            user = ref_payslip.profile.user
             full_name = f"{user.first_name} {user.last_name}".strip() if user else None
             
             try:
-                pdf_url = request.build_absolute_uri(p.pdf_file.url) if p.pdf_file else None
+                pdf_url = request.build_absolute_uri(ref_payslip.pdf_file.url) if ref_payslip.pdf_file else None
             except Exception:
                 pdf_url = None
-            
+
+            month_idx = g['issue_date'].month
+            month_name = MONTHS_ES[month_idx - 1]
+
             results.append({
-                "id": str(p.id),
-                "profile_id": str(p.profile.id),
-                "profile_dni": p.profile.dni,
+                "id": str(g['reference_id']), 
+                "profile_id": str(ref_payslip.profile.id),
+                "profile_dni": ref_payslip.profile.dni,
                 "full_name": full_name,
-                "issue_date": p.issue_date.isoformat(),
-                "view_status": p.view_status,
-                "concept": p.concept,
-                "amount": float(p.amount),
-                "data_source": p.data_source,
-                "payroll_type": p.payroll_type,
-                "data_type": p.data_type,
-                "position_order": p.position_order,
+                "issue_date": g['issue_date'].isoformat(),
+                "period_es": f"{month_name} {g['issue_date'].year}",
+                "view_status": 'generated' if g['has_pdf'] else 'unseen',
+                "concept": "BOLETA RESUMEN MENSUAL",
+                "total_ingresos": float(g['total_ingresos'] or 0.00),
+                "total_descuentos": float(g['total_descuentos'] or 0.00),
+                "amount": float(g['liquido_pagar'] or 0.00),
                 "pdf_url": pdf_url,
             })
 
@@ -452,83 +465,80 @@ class PayslipUploadViewSet(viewsets.ViewSet):
         }
 
         return Response(
-            APIResponse.success(
-                data=results,
-                message=f"{len(results)} boletas obtenidas.",
-                meta={"pagination": pagination}
-            ),
+            APIResponse.success(data=results, message=f"{len(results)} periodos de boletas obtenidos.", meta={"pagination": pagination}),
             status=status.HTTP_200_OK
         )
 
     @action(detail=False, methods=['get'], url_path='my-payslips')
     def my_payslips(self, request):
+        """
+        Vista para el Usuario Común: Lista un único registro resumen por cada mes,
+        evitando que visualice filas repetidas de sus propios conceptos.
+        """
         user = request.user
-
         if user.profile.role != 'user':
             return Response(
-                APIResponse.error(
-                    message="No tiene permisos para acceder a sus boletas.",
-                    code=status.HTTP_403_FORBIDDEN
-                ),
+                APIResponse.error(message="No tiene permisos para acceder a sus boletas.", code=status.HTTP_403_FORBIDDEN),
                 status=status.HTTP_403_FORBIDDEN
             )
 
         profile = user.profile
-
         month = request.query_params.get('month') 
         year = request.query_params.get('year') 
-
-        payslips_qs = Payslip.objects.filter(profile=profile).order_by('-issue_date')
+        payslips_qs = Payslip.objects.filter(profile=profile)
 
         if year:
-            try:
-                year = int(year)
-                payslips_qs = payslips_qs.filter(issue_date__year=year)
-            except ValueError:
-                return Response(
-                    APIResponse.error(message="Año inválido"),
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            try: payslips_qs = payslips_qs.filter(issue_date__year=int(year))
+            except ValueError: return Response(APIResponse.error(message="Año inválido"), status=400)
 
         if month:
             try:
-                month = int(month)
-                if not 1 <= month <= 12:
-                    raise ValueError
-                payslips_qs = payslips_qs.filter(issue_date__month=month)
-            except ValueError:
-                return Response(
-                    APIResponse.error(message="Mes inválido"),
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+                m_int = int(month)
+                if not 1 <= m_int <= 12: raise ValueError
+                payslips_qs = payslips_qs.filter(issue_date__month=m_int)
+            except ValueError: return Response(APIResponse.error(message="Mes inválido"), status=400)
+
+        grouped_qs = payslips_qs.values('issue_date').annotate(
+            total_ingresos=Max('amount', filter=Q(data_source='TOTALINGRESOS')),
+            total_descuentos=Max('amount', filter=Q(data_source='TOTALDSCTO')),
+            liquido_pagar=Max('amount', filter=Q(data_source='LIQUIDOPAGAR')),
+            reference_id=Max('id'),
+            has_pdf=Max('pdf_file', filter=Q(pdf_file__isnull=False, pdf_file__ne=''))
+        ).order_by('-issue_date')
 
         page = int(request.query_params.get('page', 1))
         page_size = 20
         offset = (page - 1) * page_size
         limit = offset + page_size
 
-        total = payslips_qs.count()
-        payslips = payslips_qs[offset:limit]
+        total = grouped_qs.count()
+        paginated_groups = grouped_qs[offset:limit]
 
         results = []
-        for p in payslips:
+        for g in paginated_groups:
+            ref_payslip = Payslip.objects.filter(id=g['reference_id']).first()
+            if not ref_payslip:
+                continue
+
             try:
-                pdf_url = request.build_absolute_uri(p.pdf_file.url) if p.pdf_file else None
+                pdf_url = request.build_absolute_uri(ref_payslip.pdf_file.url) if ref_payslip.pdf_file else None
             except Exception:
                 pdf_url = None
 
+            month_idx = g['issue_date'].month
+            month_name = MONTHS_ES[month_idx - 1]
+
             results.append({
-                "id": str(p.id),
-                "profile_id": str(p.profile.id),
-                "profile_dni": p.profile.dni,
-                "issue_date": p.issue_date.isoformat(),
-                "view_status": p.view_status,
-                "concept": p.concept,
-                "amount": float(p.amount),
-                "data_source": p.data_source,
-                "payroll_type": p.payroll_type,
-                "data_type": p.data_type,
-                "position_order": p.position_order,
+                "id": str(g['reference_id']), 
+                "profile_id": str(profile.id),
+                "profile_dni": profile.dni,
+                "issue_date": g['issue_date'].isoformat(),
+                "period_es": f"{month_name} {g['issue_date'].year}",
+                "view_status": 'generated' if g['has_pdf'] else 'unseen',
+                "concept": "BOLETA DE PAGO MENSUAL",
+                "total_ingresos": float(g['total_ingresos'] or 0.00),
+                "total_descuentos": float(g['total_descuentos'] or 0.00),
+                "amount": float(g['liquido_pagar'] or 0.00), 
                 "pdf_url": pdf_url,
             })
 
@@ -542,14 +552,10 @@ class PayslipUploadViewSet(viewsets.ViewSet):
         }
 
         return Response(
-            APIResponse.success(
-                data=results,
-                message=f"{len(results)} boletas obtenidas.",
-                meta={"pagination": pagination}
-            ),
+            APIResponse.success(data=results, message=f"{len(results)} boletas mensuales obtenidas.", meta={"pagination": pagination}),
             status=status.HTTP_200_OK
         )
-
+    
     @action(detail=False, methods=['get'], url_path='view-payslip')
     def view_payslip(self, request):
         payslip_id = request.query_params.get('id')
@@ -632,7 +638,6 @@ class PayslipUploadViewSet(viewsets.ViewSet):
             status=status.HTTP_200_OK
         )
 
-
     @action(detail=False, methods=['get'], url_path='generate-payslip')
     def generate_payslip(self, request):
         user = request.user
@@ -643,15 +648,12 @@ class PayslipUploadViewSet(viewsets.ViewSet):
 
         if not (is_admin or is_user):
             return Response(
-                APIResponse.error(
-                    message="No tiene permisos para generar boletas.",
-                    code=status.HTTP_403_FORBIDDEN
-                ),
+                APIResponse.error(message="No tiene permisos para generar boletas.", code=status.HTTP_403_FORBIDDEN),
                 status=status.HTTP_403_FORBIDDEN
             )
 
-        payslip_id = request.query_params.get('id')
-        if not payslip_id:
+        reference_id = request.query_params.get('id')
+        if not reference_id:
             return Response(
                 APIResponse.error(message="Debe proporcionar el parámetro 'id' de la boleta."),
                 status=status.HTTP_400_BAD_REQUEST
@@ -659,32 +661,55 @@ class PayslipUploadViewSet(viewsets.ViewSet):
 
         try:
             if is_admin:
-                payslip = Payslip.objects.get(id=payslip_id)
+                reference_payslip = Payslip.objects.get(id=reference_id)
             else:
-                payslip = Payslip.objects.get(id=payslip_id, profile=profile)
+                reference_payslip = Payslip.objects.get(id=reference_id, profile=profile)
         except Payslip.DoesNotExist:
             return Response(
-                APIResponse.error(message="Boleta no encontrada o no tiene permiso para generarla."),
+                APIResponse.error(message="Boleta no encontrada o no tiene permiso."),
                 status=status.HTTP_404_NOT_FOUND
             )
-
-        payslip_owner_profile = payslip.profile
+            
+        payslip_owner_profile = reference_payslip.profile
         payslip_owner_user = payslip_owner_profile.user
+        target_date = reference_payslip.issue_date
 
+        all_concepts = Payslip.objects.filter(
+            profile=payslip_owner_profile,
+            issue_date__year=target_date.year,
+            issue_date__month=target_date.month
+        ).order_by('position_order')
+
+        ingresos_list = []
+        descuentos_list = []
+        
+        total_ingresos = Decimal("0.00")
+        total_descuentos = Decimal("0.00")
+        liquido_pagar = Decimal("0.00")
+
+        for item in all_concepts:
+            if item.data_source in ['TOTALINGRESOS', 'TOTALDSCTO', 'LIQUIDOPAGAR']:
+                if item.data_source == 'TOTALINGRESOS': total_ingresos = item.amount
+                if item.data_source == 'TOTALDSCTO': total_descuentos = item.amount
+                if item.data_source == 'LIQUIDOPAGAR': liquido_pagar = item.amount
+                continue
+            
+            concept_data = {
+                "code": item.position_order,
+                "name": item.concept,
+                "amount": item.amount
+            }
+
+            if item.payroll_type == 'INGRESOS':
+                ingresos_list.append(concept_data)
+            elif item.payroll_type == 'DESCUENTOS':
+                descuentos_list.append(concept_data)
+                
         work_details = getattr(payslip_owner_profile, 'work_details', None)
-
-        issue_month_name = MONTHS_ES[payslip.issue_date.month - 1]
-        issue_date_es = f"{issue_month_name} {payslip.issue_date.year}"
+        issue_month_name = MONTHS_ES[target_date.month - 1]
+        issue_date_es = f"{issue_month_name} {target_date.year}"
         print_date = timezone.now().strftime("%d/%m/%Y")
-
-        remuneracion_total = payslip.amount
-        asignacion_familiar = Decimal("113.00")
-        reintegros = Decimal("585.90")
-        total_bruto = remuneracion_total + asignacion_familiar + reintegros
-
-        aporte_patronal = round(total_bruto * Decimal("0.09"), 2)
-        total_descuento = Decimal("197.92") + Decimal("33.45") + Decimal("27.12")
-        total_liquido = total_bruto - total_descuento
+        aporte_patronal = round(total_ingresos * Decimal("0.09"), 2)
 
         payload = {
             "issue_date_es": issue_date_es,
@@ -697,29 +722,19 @@ class PayslipUploadViewSet(viewsets.ViewSet):
             "condition": payslip_owner_profile.condition,
             "regimen": payslip_owner_profile.regimen,
             "category": payslip_owner_profile.category,
-
             "worked_days": work_details.worked_days if work_details else 0,
             "worked_hours": work_details.worked_hours if work_details else 0,
-            "discount_lateness": (
-                (work_details.discount_lateness or 0) + (work_details.personal_leave_hours or 0)
-            ) if work_details else 0,
-            "start_date": payslip_owner_profile.start_date.strftime("%d/%m/%Y") if profile.start_date else "—",
-            "end_date": payslip_owner_profile.end_date.strftime("%d/%m/%Y") if profile.end_date else "VIGENTE",
-
-            "remuneracion_total": payslip.amount,
-            "asignacion_familiar": 113.00,
-            "reintegros": 585.90,
+            "discount_lateness": ((work_details.discount_lateness or 0) + (work_details.personal_leave_hours or 0)) if work_details else 0,
+            "start_date": payslip_owner_profile.start_date.strftime("%d/%m/%Y") if payslip_owner_profile.start_date else "—",
+            "end_date": payslip_owner_profile.end_date.strftime("%d/%m/%Y") if payslip_owner_profile.end_date else "VIGENTE",
             "sistema_pension": payslip_owner_profile.descriptionSP or "—",
             "codigo_afiliado": payslip_owner_profile.identification_code or "—",
-            "aporte_individual": 197.92,
-            "comision_flujo": 33.45,
-            "prima_seguro": 27.12,
-            "total_descuento": total_descuento,
-            "descuento_dominical": work_details.sunday_discount if work_details else 0,
-            "dias_vacaciones": work_details.vacation_days if work_details else 0,
+            "ingresos": ingresos_list,
+            "descuentos": descuentos_list,
+            "total_bruto": total_ingresos,
+            "total_descuento": total_descuentos,
+            "total_liquido": liquido_pagar,
             "aporte_patronal": aporte_patronal,
-            "total_bruto": total_bruto,
-            "total_liquido": total_liquido,
         }
 
         html = render_to_string('boleta.html', payload)
@@ -732,48 +747,32 @@ class PayslipUploadViewSet(viewsets.ViewSet):
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )
 
-        pdf_filename = f"boleta_{payslip.id}.pdf"
-        payslip.pdf_file.save(pdf_filename, ContentFile(pdf_buffer.getvalue()))
-        payslip.view_status = 'generated'
-        payslip.save()
+        pdf_filename = f"boleta_{reference_payslip.id}.pdf"
+        reference_payslip.pdf_file.save(pdf_filename, ContentFile(pdf_buffer.getvalue()))
+        
+        all_concepts.update(view_status='generated')
 
-        pdf_url = request.build_absolute_uri(payslip.pdf_file.url)
+        pdf_url = request.build_absolute_uri(reference_payslip.pdf_file.url)
         qr_bytes = generate_qr_code(pdf_url)
 
         send_payslip_email(
             user=payslip_owner_user,
             secure_url=pdf_url,
             qr_bytes=qr_bytes,
-            issue_date=payslip.issue_date
+            issue_date=reference_payslip.issue_date
         )
 
-        if is_admin and payslip_owner_user != user:
-            description = (
-                f"El administrador {user.first_name} {user.last_name} generó la boleta "
-                f"{payslip.id} perteneciente al usuario {payslip_owner_user.first_name} "
-                f"{payslip_owner_user.last_name} del periodo {payslip.issue_date}."
-            )
-        else:
-            description = (
-                f"El usuario {user.first_name} {user.last_name} generó su boleta "
-                f"con ID {payslip.id}, correspondiente al periodo {payslip.issue_date}."
-            )
-
-        AuditLog.objects.create(
-            profile=user.profile,
-            action="GENERAR BOLETA",
-            description=description
-        )
+        description = f"Boleta generada del periodo {issue_date_es} para {payslip_owner_user.first_name}."
+        AuditLog.objects.create(profile=user.profile, action="GENERAR BOLETA", description=description)
 
         return Response(
             APIResponse.success(
                 data={
-                    "id": str(payslip.id),
-                    "pdf_url": payslip.pdf_file.url,
-                    "view_status": payslip.view_status
+                    "id": str(reference_payslip.id),
+                    "pdf_url": reference_payslip.pdf_file.url,
+                    "view_status": 'generated'
                 },
                 message="Boleta generada exitosamente."
             ),
             status=status.HTTP_200_OK
         )
-        

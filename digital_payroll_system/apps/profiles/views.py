@@ -36,7 +36,7 @@ REQUIRED_COLUMNS = {
     'end_date': ['fecha fin', 'end date'],
     'resigned_date': ['fecha renuncia', 'fecha de renuncia', 'resigned date'],
     'resigned': ['con renuncia', 'resigned'],
-    'establishment': ['establecimiento', 'establishment']
+    'establishment': ['establecimiento', 'establishment', 'nombreestablecimiento']
 }
 
 OPTIONAL_COLUMNS = {
