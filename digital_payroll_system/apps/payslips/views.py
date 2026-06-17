@@ -412,7 +412,7 @@ class PayslipUploadViewSet(viewsets.ViewSet):
             total_descuentos=Max('amount', filter=Q(data_source='TOTALDSCTO')),
             liquido_pagar=Max('amount', filter=Q(data_source='LIQUIDOPAGAR')),
             reference_id=Max('id'),
-            has_pdf=Max('pdf_file', filter=Q(pdf_file__isnull=False, pdf_file__ne=''))
+            has_pdf=Max('pdf_file', filter=Q(pdf_file__isnull=False) & ~Q(pdf_file=''))
         ).order_by('-issue_date')
 
         total = grouped_qs.count()
@@ -503,7 +503,7 @@ class PayslipUploadViewSet(viewsets.ViewSet):
             total_descuentos=Max('amount', filter=Q(data_source='TOTALDSCTO')),
             liquido_pagar=Max('amount', filter=Q(data_source='LIQUIDOPAGAR')),
             reference_id=Max('id'),
-            has_pdf=Max('pdf_file', filter=Q(pdf_file__isnull=False, pdf_file__ne=''))
+            has_pdf=Max('pdf_file', filter=Q(pdf_file__isnull=False) & ~Q(pdf_file=''))
         ).order_by('-issue_date')
 
         page = int(request.query_params.get('page', 1))

@@ -2,155 +2,84 @@
 <html lang="es">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Boleta de Pagos de Remuneraciones</title>
     <style>
+      /* CONFIGURACIÓN CRÍTICA PARA VOLTEAR LA HOJA A HORIZONTAL */
+      @page {
+        size: a4 landscape; /* Fuerza el formato horizontal (297mm de ancho) */
+        margin: 10mm 15mm 10mm 15mm; /* Define márgenes de impresión seguros */
+      }
+
       body {
         font-family: Arial, sans-serif;
-        font-size: 10pt;
-        margin: 20px;
+        font-size: 9.5pt;
+        margin: 0;
+        padding: 0;
       }
       .payslip {
         width: 100%;
-        max-width: 900px;
         margin: 0 auto;
         border: 1px solid #000;
-        padding: 10px;
-      }
-      .header,
-      .data-row,
-      .section-title,
-      .totals-row {
-        display: flex;
-        flex-wrap: wrap;
-        border-bottom: 1px solid #ccc;
-        padding: 5px 0;
+        padding: 8px;
       }
       .header {
         text-align: center;
-        flex-direction: column;
         border-bottom: 2px solid #000;
-        padding-bottom: 10px;
+        padding-bottom: 8px;
+        width: 100%;
       }
       .header div {
         width: 100%;
-        margin-bottom: 3px;
+        margin-bottom: 2px;
       }
       .header-main-title {
-        font-size: 12pt;
+        font-size: 11.5pt;
         font-weight: bold;
       }
-      .info-item {
-        flex: 1 1 50%;
-        padding: 2px 5px;
-        box-sizing: border-box;
-      }
       .info-item-small {
-        flex: 1 1 33%;
-        padding: 2px 5px;
-        box-sizing: border-box;
+        font-size: 9.5pt;
       }
       .info-item label {
         font-weight: bold;
-        display: inline-block;
-        min-width: 100px;
       }
       .data-box-container {
-        display: flex;
-        flex-wrap: wrap;
-        border-top: 1px solid #000;
-        padding-top: 5px;
+        width: 100%;
+        margin-top: 5px;
       }
       .data-box {
-        flex: 1 1 25%;
-        box-sizing: border-box;
         border: 1px solid #000;
-        margin: 0 -1px -1px 0;
-        padding: 10px 5px;
-        min-height: 250px;
-        max-width: 25%;
-      }
-      .data-box:last-child {
-        flex: 1 1 34%;
+        padding: 6px 4px;
+        min-height: 230px; /* Reducido ligeramente para optimizar el alto horizontal */
       }
       .section-title {
         font-weight: bold;
         background-color: #f0f0f0;
-        border: none;
         border-bottom: 1px solid #000;
-        padding: 5px;
-      }
-      .section-title > div {
-        flex: 1 1 50%;
-        text-align: center;
+        padding: 4px;
+        font-size: 9pt;
       }
       .remuneracion-row,
       .descuento-row,
       .aporte-row {
-        display: flex;
         border-bottom: 1px dashed #eee;
-        padding: 2px 0;
-      }
-      .remuneracion-row > div:first-child,
-      .descuento-row > div:first-child,
-      .aporte-row > div:first-child {
-        flex: 1;
-        padding-left: 5px;
-      }
-      .remuneracion-row > div:last-child,
-      .descuento-row > div:last-child,
-      .aporte-row > div:last-child {
-        width: 80px;
-        text-align: right;
-        padding-right: 5px;
-      }
-      .descuento-ley-label {
+        padding: 3px 0;
         width: 100%;
-        font-weight: bold;
-        margin-top: 10px;
-        margin-bottom: 5px;
-        text-align: center;
       }
       .days-trab-box {
         border: 1px solid #000;
-        margin-top: 10px;
-        padding: 5px;
+        margin-top: 8px;
+        padding: 4px;
         text-align: center;
-      }
-      .totals-row {
-        font-weight: bold;
-        margin-top: 10px;
-        border-top: 2px solid #000;
-        border-bottom: none;
-        justify-content: space-between;
-      }
-      .totals-row .total-label {
-        flex: 1;
-        text-align: left;
-        padding-left: 5px;
-      }
-      .totals-row .total-amount {
-        width: 120px;
-        text-align: right;
-        padding-right: 5px;
       }
       .liquid-pay-box {
         border: 2px solid #000;
-        padding: 10px;
+        padding: 5px;
         text-align: center;
-        font-size: 12pt;
-        flex: 1 1 34%;
-        box-sizing: border-box;
-        margin: 10px -1px -1px 0;
-        min-height: 50px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
       }
       .patronal-box {
         border: 1px solid #000;
         margin-top: 10px;
-        padding: 5px;
+        padding: 4px;
       }
       .patronal-box .amount {
         text-align: right;
@@ -158,165 +87,177 @@
       }
       .patronal-box-inner {
         border-top: 1px solid #000;
-        margin-top: 5px;
-        padding-top: 5px;
+        margin-top: 4px;
+        padding-top: 4px;
       }
     </style>
   </head>
- <body>
-  <div class="payslip">
-    <div class="header">
-      <div>
-        UNIVERSIDAD TECNOLOGICA DE LOS ANDES &nbsp;&nbsp;&nbsp; RUC:
-        20104988204 &nbsp;&nbsp;&nbsp; SUB DIRECCION DE RECURSOS HUMANOS
-        &nbsp;&nbsp;&nbsp; Nro. 18
-      </div>
-      <div class="header-main-title">
-        PLANILLA PERSONAL DOCENTE CONTRATADO TIEMPO PARCIAL SEDE CENTRAL
-      </div>
-      <div class="header-main-title">BOLETA DE PAGOS DE REMUNERACIONES</div>
-    </div>
-
-    <div class="data-row">
-      <div class="info-item-small">
-        <label>FECHA Impr.:</label> {{ print_date }}
-      </div>
-      <div class="info-item-small"><label>{{ issue_date_es }}</label></div>
-      <div class="info-item-small">
-        <label>FechaIngreso:</label> {{ start_date }}
-      </div>
-    </div>
-
-    <div class="data-row">
-      <div class="info-item">
-        <label>DNI:</label> {{ dni }} &nbsp;&nbsp;&nbsp; {{ last_name }}, {{ first_name }}
-      </div>
-      <div class="info-item">
-        <label>{{ position }}</label>
-      </div>
-    </div>
-
-    <div class="data-row">
-      <div class="info-item-small"><label>Condición:</label> {{ condition }}</div>
-      <div class="info-item-small"><label>Régimen:</label> {{ regimen }}</div>
-      <div class="info-item-small"><label>Categoría:</label> {{ category }}</div>
-      <div class="info-item-small"><label>DíasPagar:</label> {{ worked_days }}</div>
-      <div class="info-item-small"><label>Hrs.Pagar:</label> {{ worked_hours }}</div>
-      <div class="info-item-small"><label>Tard. y PP:</label> {{ discount_lateness }}</div>
-      <div class="info-item-small"><label>FechaCese:</label> {{ end_date }}</div>
-    </div>
-
-    <div class="data-box-container">
+  <body>
+    <div class="payslip">
       
-      <div class="data-box" style="border-left: 1px solid #000">
-        <div class="section-title" style="border-bottom: 1px solid #000; background-color: #fff; padding: 0;">
-          <div style="text-align: left; flex: 1; padding-left: 5px">
-            Remuneraciones Ingresos
-          </div>
-          <div style="width: 80px; text-align: right; padding-right: 5px"></div>
-        </div>
-        
-        {% for ing in ingresos %}
-        <div class="remuneracion-row">
-          <div>{{ ing.name }}</div>
-          <div>{{ ing.amount }}</div>
-        </div>
-        {% empty %}
-        <div class="remuneracion-row" style="border: none">
-          <div>Sin ingresos registrados</div>
-          <div></div>
-        </div>
-        {% endfor %}
-      </div>
-
-      <div class="data-box">
-        <div class="section-title" style="border-bottom: 1px solid #000; background-color: #fff; padding: 0;">
-          <div style="text-align: center; flex: 1">Descuentos de Ley</div>
-        </div>
-        <div class="descuento-row">
-          <div>Nombre del Sist. de Pensión:</div>
-          <div></div>
-        </div>
-        <div class="descuento-row">
-          <div>{{ sistema_pension }}</div>
-          <div></div>
-        </div>
-        <div class="descuento-row" style="border-bottom: 1px solid #ccc">
-          <div>Cód.Afil.Prof. {{ codigo_afiliado }}</div>
-          <div></div>
-        </div>
-        
-        {% for desc in descuentos %}
-        <div class="descuento-row">
-          <div>{{ desc.name }}</div>
-          <div>{{ desc.amount }}</div>
-        </div>
-        {% empty %}
-        <div class="descuento-row" style="border: none">
-          <div>Sin descuentos de ley</div>
-          <div></div>
-        </div>
-        {% endfor %}
-      </div>
-
-      <div class="data-box">
-        <div class="section-title" style="border-bottom: 1px solid #000; background-color: #fff; padding: 0;">
-          <div style="text-align: left; flex: 1; padding-left: 5px">
-            Descuentos Personales
-          </div>
-          <div style="width: 80px; text-align: right; padding-right: 5px"></div>
-        </div>
-        <div class="remuneracion-row" style="border: none">
-          <div>Ninguno</div>
-          <div></div>
-        </div>
-      </div>
-
-      <div class="data-box" style="display: flex; flex-direction: column; justify-content: space-between;">
+      <div class="header">
         <div>
-          <div class="section-title" style="border-bottom: 1px solid #000; background-color: #fff; padding: 0;">
-            <div style="text-align: left; flex: 1; padding-left: 5px">
-              Días efectivos lab. y no lab.
-            </div>
-            <div style="width: 80px; text-align: right; padding-right: 5px"></div>
-          </div>
-          <div class="days-trab-box">
-            <div>Días Trab.</div>
-            <div class="amount" style="font-size: 14pt">{{ worked_days }}</div>
-          </div>
+          UNIVERSIDAD TECNOLOGICA DE LOS ANDES &nbsp;&nbsp;&nbsp; RUC:
+          20104988204 &nbsp;&nbsp;&nbsp; SUB DIRECCION DE RECURSOS HUMANOS
+          &nbsp;&nbsp;&nbsp; Nro. 18
         </div>
-        <div class="patronal-box">
-          <div class="section-title" style="background-color: #fff; padding: 0; border: none">
-            <div style="text-align: center; flex: 1">Aporte Patronal</div>
-          </div>
-          <div class="patronal-box-inner">
-            <div class="remuneracion-row" style="border: none">
-              <div>RPS. 9%</div>
-              <div class="amount">{{ aporte_patronal }}</div>
-            </div>
-          </div>
+        <div class="header-main-title">
+          PLANILLA PERSONAL DOCENTE CONTRATADO TIEMPO PARCIAL SEDE CENTRAL
         </div>
+        <div class="header-main-title">BOLETA DE PAGOS DE REMUNERACIONES</div>
       </div>
+
+      <table style="width: 100%; border-collapse: collapse; border-bottom: 1px solid #ccc; margin-top: 4px; margin-bottom: 4px;">
+        <tr>
+          <td class="info-item-small" style="width: 33.3%; border: none; padding: 2px 0;"><label>FECHA Impr.:</label> {{ print_date }}</td>
+          <td class="info-item-small" style="width: 33.3%; border: none; padding: 2px 0; text-align: center; font-weight: bold;"><label>{{ issue_date_es }}</label></td>
+          <td class="info-item-small" style="width: 33.3%; border: none; text-align: right; padding: 2px 0;"><label>FechaIngreso:</label> {{ start_date }}</td>
+        </tr>
+      </table>
+
+      <table style="width: 100%; border-collapse: collapse; border-bottom: 1px solid #ccc; margin-bottom: 4px;">
+        <tr>
+          <td style="width: 50%; border: none; padding: 2px 0;"><label>DNI:</label> {{ dni }} &nbsp;&nbsp;&nbsp; {{ last_name }}, {{ first_name }}</td>
+          <td style="width: 50%; border: none; text-align: right; font-weight: bold; padding: 2px 0;">{{ position }}</td>
+        </tr>
+      </table>
+
+      <table style="width: 100%; border-collapse: collapse; border-bottom: 1px solid #ccc; margin-bottom: 6px; font-size: 8.5pt;">
+        <tr>
+          <td style="border: none; padding: 2px 0;"><label>Condición:</label> {{ condition }}</td>
+          <td style="border: none; padding: 2px 0;"><label>Régimen:</label> {{ regimen }}</td>
+          <td style="border: none; padding: 2px 0;"><label>Categoría:</label> {{ category }}</td>
+          <td style="border: none; padding: 2px 0;"><label>DíasPagar:</label> {{ worked_days }}</td>
+          <td style="border: none; padding: 2px 0;"><label>Hrs.Pagar:</label> {{ worked_hours }}</td>
+          <td style="border: none; padding: 2px 0;"><label>Tard. y PP:</label> {{ discount_lateness }}</td>
+          <td style="border: none; text-align: right; padding: 2px 0;"><label>FechaCese:</label> {{ end_date }}</td>
+        </tr>
+      </table>
+
+      <table style="width: 100%; border-collapse: collapse; margin-top: 4px;">
+        <tr>
+          <td valign="top" style="width: 25%; padding: 0; border: none;">
+            <div class="data-box" style="border-left: 1px solid #000; margin-right: 1px;">
+              <div class="section-title" style="text-align: left;">
+                Remuneraciones Ingresos
+              </div>
+              
+              {% for ing in ingresos %}
+              <div class="remuneracion-row">
+                <span style="float: left; padding-left: 3px;">{{ ing.name }}</span>
+                <span style="float: right; padding-right: 3px; width: 65px; text-align: right;">{{ ing.amount }}</span>
+                <div style="clear: both;"></div>
+              </div>
+              {% empty %}
+              <div class="remuneracion-row" style="border: none;"><div style="padding-left: 3px; color: #888; font-size: 8.5pt;">Sin ingresos</div></div>
+              {% endfor %}
+            </div>
+          </td>
+
+          <td valign="top" style="width: 25%; padding: 0; border: none;">
+            <div class="data-box" style="margin-right: 1px;">
+              <div class="section-title" style="text-align: center;">
+                Descuentos de Ley
+              </div>
+              
+              <table style="width: 100%; border-collapse: collapse; border: none; font-size: 8.5pt;">
+                <tr><td style="font-size: 7.5pt; font-weight: bold; padding-left: 3px; border: none;">Nombre del Sist. de Pensión:</td></tr>
+                <tr><td style="font-weight: bold; padding-left: 3px; border: none;">{{ sistema_pension }}</td></tr>
+                <tr><td style="font-size: 7.5pt; padding-left: 3px; border: none; border-bottom: 1px solid #ccc; padding-bottom: 2px;">Cód.Afil.Prof. {{ codigo_afiliado }}</td></tr>
+              </table>
+              
+              {% for desc in descuentos %}
+              <div class="descuento-row">
+                <span style="float: left; padding-left: 3px;">{{ desc.name }}</span>
+                <span style="float: right; padding-right: 3px; width: 65px; text-align: right;">{{ desc.amount }}</span>
+                <div style="clear: both;"></div>
+              </div>
+              {% empty %}
+              <div class="descuento-row" style="border: none;"><div style="padding-left: 3px; color: #888; font-size: 8.5pt;">Sin descuentos</div></div>
+              {% endfor %}
+            </div>
+          </td>
+
+          <td valign="top" style="width: 25%; padding: 0; border: none;">
+            <div class="data-box" style="margin-right: 1px;">
+              <div class="section-title" style="text-align: left;">
+                Descuentos Personales
+              </div>
+              <div class="remuneracion-row" style="border: none;">
+                <div style="padding-left: 3px; color: #888; font-size: 8.5pt;">Ninguno</div>
+              </div>
+            </div>
+          </td>
+
+          <td valign="top" style="width: 25%; padding: 0; border: none;">
+            <div class="data-box">
+              <div class="section-title" style="text-align: left;">
+                Días efectivos lab. y no lab.
+              </div>
+              
+              <div class="days-trab-box">
+                <table style="width: 100%; border-collapse: collapse; border: none;">
+                  <tr>
+                    <td align="left" style="font-size: 8.5pt; border: none;">Días Trab.</td>
+                    <td align="right" style="font-size: 12pt; font-weight: bold; width: 45px; border: none;">{{ worked_days }}</td>
+                  </tr>
+                </table>
+              </div>
+              
+              <div class="patronal-box">
+                <div style="padding: 2px; border: none; font-weight: bold; text-align: center; font-size: 9pt;">
+                  Aporte Patronal
+                </div>
+                <div class="patronal-box-inner">
+                  <div class="remuneracion-row" style="border: none;">
+                    <span style="float: left;">RPS. 9%</span>
+                    <span style="float: right; font-weight: bold;">{{ aporte_patronal }}</span>
+                    <div style="clear: both;"></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </table>
+
+      <table style="width: 100%; border-collapse: collapse; margin-top: 10px;">
+        <tr>
+          <td valign="middle" style="width: 33%; border-bottom: 1px solid #000; border-top: 2px solid #000; padding: 5px 0;">
+            <table style="width: 100%; border-collapse: collapse; font-weight: bold; font-size: 9.5pt; border: none;">
+              <tr>
+                <td align="left" style="padding-left: 4px; border: none;">TOTAL</td>
+                <td align="right" style="padding-right: 4px; width: 85px; border: none;">{{ total_bruto }}</td>
+              </tr>
+            </table>
+          </td>
+
+          <td style="width: 1.5%;"></td>
+
+          <td valign="middle" style="width: 32%; border-bottom: 1px solid #000; border-top: 2px solid #000; padding: 5px 0;">
+            <table style="width: 100%; border-collapse: collapse; font-weight: bold; font-size: 9.5pt; border: none;">
+              <tr>
+                <td align="left" style="padding-left: 4px; border: none;">TOT. DCTOS.</td>
+                <td align="right" style="padding-right: 4px; width: 85px; border: none;">{{ total_descuento }}</td>
+              </tr>
+            </table>
+          </td>
+
+          <td style="width: 1.5%;"></td>
+
+          <td valign="middle" style="width: 32%; padding: 0;">
+            <div class="liquid-pay-box">
+              <table style="width: 100%; border-collapse: collapse; font-weight: bold; border: none;">
+                <tr>
+                  <td align="left" style="font-size: 9pt; padding-left: 2px; border: none;">**LIQUIDO A PAGAR**</td>
+                  <td align="right" style="font-size: 14pt; padding-right: 2px; width: 85px; border: none;">{{ total_liquido }}</td>
+                </tr>
+              </table>
+            </div>
+          </td>
+        </tr>
+      </table>
 
     </div>
-
-    <div style="display: flex; margin-top: 10px">
-      <div class="totals-row total-label" style="flex: 1 1 33%; border-bottom: 1px solid #000; border-top: 1px solid #000; margin-right: 1px;">
-        <div class="total-label">TOTAL</div>
-        <div class="total-amount">{{ total_bruto }}</div>
-      </div>
-
-      <div class="totals-row total-label" style="flex: 1 1 33%; border-bottom: 1px solid #000; border-top: 1px solid #000; margin-right: 1px;">
-        <div class="total-label">TOT. DCTOS.</div>
-        <div class="total-amount">{{ total_descuento }}</div>
-      </div>
-
-      <div class="liquid-pay-box" style="flex: 1 1 34%; border-left: 1px solid #000">
-        <div><strong>LIQUIDO A PAGAR</strong></div>
-        <div style="font-size: 16pt">{{ total_liquido }}</div>
-      </div>
-    </div>
-
-  </div>
-</body>
+  </body>
 </html>
